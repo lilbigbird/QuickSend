@@ -879,7 +879,7 @@ app.post('/s3/upload-url', async (req, res) => {
   }
   
   // Get user ID if authenticated, otherwise use 'anonymous'
-  const userId = req.user?.id || 'anonymous';
+  const userId = req.user?.id || null;
   console.log(`[Worker ${process.pid}] User ID: ${userId}`);
   
   const fileId = uuidv4();
@@ -896,7 +896,7 @@ app.post('/s3/upload-url', async (req, res) => {
     Expires: expirationTime,
     ContentType: fileType,
     Metadata: {
-      uploadedBy: userId
+      uploadedBy: userId ? userId : 'anonymous'
     }
   };
   
