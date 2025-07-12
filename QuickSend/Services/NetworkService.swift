@@ -53,14 +53,19 @@ class NetworkService {
     // MARK: - Optimized S3 Upload (Direct to S3)
     func uploadFileOptimized(fileURL: URL, progressHandler: @escaping (Float) -> Void, completion: @escaping (Result<UploadResponse, NetworkError>) -> Void) {
         let fileName = fileURL.lastPathComponent
-        let fileType = "application/octet-stream" // You can detect this more accurately if needed
+        let fileType = getMimeType(for: fileURL) ?? "application/octet-stream"
+        
+        print("📤 Starting optimized upload for file: \(fileName)")
+        print("📤 File type: \(fileType)")
         
         // Step 1: Get presigned upload URL from backend
         getS3UploadURL(fileName: fileName, fileType: fileType) { [weak self] result in
             switch result {
             case .success(let s3Response):
+                print("✅ Got presigned URL for file: \(fileName)")
                 // Step 2: Upload directly to S3 using presigned URL
                 guard let presignedURL = URL(string: s3Response.url) else {
+                    print("❌ Invalid presigned URL")
                     completion(.failure(.invalidURL))
                     return
                 }
@@ -68,6 +73,7 @@ class NetworkService {
                 self?.uploadFileToS3(fileURL: fileURL, presignedURL: presignedURL, progressHandler: progressHandler) { uploadResult in
                     switch uploadResult {
                     case .success:
+                        print("✅ S3 upload successful for file: \(fileName)")
                         // Step 3: Create a mock UploadResponse for compatibility
                         let uploadResponse = UploadResponse(
                             success: true,
@@ -79,12 +85,56 @@ class NetworkService {
                         )
                         completion(.success(uploadResponse))
                     case .failure(let error):
+                        print("❌ S3 upload failed for file: \(fileName), error: \(error)")
                         completion(.failure(error))
                     }
                 }
             case .failure(let error):
+                print("❌ Failed to get presigned URL for file: \(fileName), error: \(error)")
                 completion(.failure(error))
             }
+        }
+    }
+    
+    // Helper function to get MIME type
+    private func getMimeType(for url: URL) -> String? {
+        let pathExtension = url.pathExtension.lowercased()
+        
+        switch pathExtension {
+        case "jpg", "jpeg":
+            return "image/jpeg"
+        case "png":
+            return "image/png"
+        case "gif":
+            return "image/gif"
+        case "pdf":
+            return "application/pdf"
+        case "txt":
+            return "text/plain"
+        case "doc":
+            return "application/msword"
+        case "docx":
+            return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        case "xls":
+            return "application/vnd.ms-excel"
+        case "xlsx":
+            return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        case "ppt":
+            return "application/vnd.ms-powerpoint"
+        case "pptx":
+            return "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        case "mp4":
+            return "video/mp4"
+        case "mov":
+            return "video/quicktime"
+        case "mp3":
+            return "audio/mpeg"
+        case "zip":
+            return "application/zip"
+        case "rar":
+            return "application/x-rar-compressed"
+        default:
+            return nil
         }
     }
     
@@ -241,6 +291,7 @@ class NetworkService {
     // MARK: - S3 Presigned URL Methods
     func getS3UploadURL(fileName: String, fileType: String, completion: @escaping (Result<S3UploadURLResponse, NetworkError>) -> Void) {
         guard let url = URL(string: "\(baseURL)/s3/upload-url") else {
+            print("❌ Invalid URL: \(baseURL)/s3/upload-url")
             completion(.failure(.invalidURL))
             return
         }
@@ -252,6 +303,9 @@ class NetworkService {
         // Add authentication token if available
         if let token = UserManager.shared.authToken {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            print("🔐 Using authentication token")
+        } else {
+            print("👤 No authentication token available")
         }
         
         let body: [String: Any] = [
@@ -261,7 +315,9 @@ class NetworkService {
         
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
+            print("📤 Request body: \(body)")
         } catch {
+            print("❌ Failed to encode request body: \(error)")
             completion(.failure(.encodingError))
             return
         }
@@ -269,29 +325,43 @@ class NetworkService {
         let task = optimizedSession.dataTask(with: request) { data, response, error in
             DispatchQueue.main.async {
                 if let error = error {
+                    print("❌ Network error: \(error)")
                     completion(.failure(.networkError(error)))
                     return
                 }
                 
                 guard let httpResponse = response as? HTTPURLResponse else {
+                    print("❌ Invalid HTTP response")
                     completion(.failure(.invalidResponse))
                     return
                 }
                 
+                print("📤 Response status: \(httpResponse.statusCode)")
+                
                 guard (200...299).contains(httpResponse.statusCode) else {
+                    if let data = data, let responseString = String(data: data, encoding: .utf8) {
+                        print("❌ Error response: \(responseString)")
+                    }
                     completion(.failure(.serverError(httpResponse.statusCode)))
                     return
                 }
                 
                 guard let data = data else {
+                    print("❌ No response data")
                     completion(.failure(.noData))
                     return
                 }
                 
+                if let responseString = String(data: data, encoding: .utf8) {
+                    print("📤 Response data: \(responseString)")
+                }
+                
                 do {
                     let response = try JSONDecoder().decode(S3UploadURLResponse.self, from: data)
+                    print("✅ Successfully decoded S3 upload URL response")
                     completion(.success(response))
                 } catch {
+                    print("❌ Failed to decode response: \(error)")
                     completion(.failure(.decodingError(error)))
                 }
             }
@@ -366,23 +436,35 @@ class NetworkService {
         request.httpMethod = "PUT"
         request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
         
+        print("📤 Starting S3 upload to: \(presignedURL)")
+        print("📤 File URL: \(fileURL)")
+        
         let task = optimizedSession.uploadTask(with: request, fromFile: fileURL) { data, response, error in
             DispatchQueue.main.async {
                 if let error = error {
+                    print("❌ S3 upload error: \(error)")
                     completion(.failure(.networkError(error)))
                     return
                 }
                 
                 guard let httpResponse = response as? HTTPURLResponse else {
+                    print("❌ Invalid HTTP response")
                     completion(.failure(.invalidResponse))
                     return
                 }
                 
+                print("📤 S3 upload response status: \(httpResponse.statusCode)")
+                if let data = data, let responseString = String(data: data, encoding: .utf8) {
+                    print("📤 S3 upload response data: \(responseString)")
+                }
+                
                 guard (200...299).contains(httpResponse.statusCode) else {
+                    print("❌ S3 upload failed with status: \(httpResponse.statusCode)")
                     completion(.failure(.serverError(httpResponse.statusCode)))
                     return
                 }
                 
+                print("✅ S3 upload completed successfully")
                 completion(.success(()))
             }
         }
