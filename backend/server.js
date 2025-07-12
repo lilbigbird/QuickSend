@@ -763,6 +763,50 @@ app.get("/storage", async (req, res) => {
     }
 });
 
+// S3 Presigned Upload URL
+app.post('/s3/upload-url', auth.authenticateToken, async (req, res) => {
+  const { fileName, fileType } = req.body;
+  if (!fileName || !fileType) {
+    return res.status(400).json({ error: 'fileName and fileType are required' });
+  }
+  const fileId = uuidv4();
+  const s3Key = `files/${fileId}/${fileName}`;
+  const params = {
+    Bucket: S3_BUCKET_NAME,
+    Key: s3Key,
+    Expires: 600, // 10 minutes
+    ContentType: fileType,
+    Metadata: {
+      uploadedBy: req.user.id || 'anonymous'
+    }
+  };
+  try {
+    const url = await s3.getSignedUrlPromise('putObject', params);
+    res.json({ url, fileId, s3Key });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to generate upload URL' });
+  }
+});
+
+// S3 Presigned Download URL
+app.post('/s3/download-url', auth.authenticateToken, async (req, res) => {
+  const { s3Key } = req.body;
+  if (!s3Key) {
+    return res.status(400).json({ error: 's3Key is required' });
+  }
+  const params = {
+    Bucket: S3_BUCKET_NAME,
+    Key: s3Key,
+    Expires: 600 // 10 minutes
+  };
+  try {
+    const url = await s3.getSignedUrlPromise('getObject', params);
+    res.json({ url });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to generate download URL' });
+  }
+});
+
 // Start server
 app.listen(PORT, "0.0.0.0", async () => {
     console.log(`QuickSend API server running on port ${PORT}`);
