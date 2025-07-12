@@ -158,6 +158,8 @@ class HomeViewController: UIViewController {
         let progress = UIProgressView(progressViewStyle: .default)
         progress.progressTintColor = UIColor.systemBlue
         progress.trackTintColor = UIColor.systemGray5
+        progress.layer.cornerRadius = 3
+        progress.clipsToBounds = true
         progress.isHidden = true
         progress.translatesAutoresizingMaskIntoConstraints = false
         return progress
@@ -337,12 +339,6 @@ class HomeViewController: UIViewController {
             generateLinkButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
             generateLinkButton.heightAnchor.constraint(equalToConstant: 50),
             
-            // Link output view (outside scroll view)
-            linkOutputView.topAnchor.constraint(equalTo: generateLinkButton.bottomAnchor, constant: 20),
-            linkOutputView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
-            linkOutputView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
-            linkOutputView.heightAnchor.constraint(equalToConstant: 80),
-            
             // Link label
             linkLabel.topAnchor.constraint(equalTo: linkOutputView.topAnchor, constant: 16),
             linkLabel.leadingAnchor.constraint(equalTo: linkOutputView.leadingAnchor, constant: 16),
@@ -360,20 +356,26 @@ class HomeViewController: UIViewController {
             shareButton.widthAnchor.constraint(equalTo: view.widthAnchor, multiplier: 0.45),
             shareButton.heightAnchor.constraint(equalToConstant: 40),
             
-            // Progress view
-            progressView.topAnchor.constraint(equalTo: shareButton.bottomAnchor, constant: 20),
-            progressView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
-            progressView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
-            progressView.heightAnchor.constraint(equalToConstant: 4),
+            // Activity indicator (above everything else)
+            activityIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            activityIndicator.centerYAnchor.constraint(equalTo: view.centerYAnchor),
             
-            // Progress label
-            progressLabel.topAnchor.constraint(equalTo: progressView.bottomAnchor, constant: 8),
-            progressLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
-            progressLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
+            // Progress view (between generate button and link output)
+            progressView.topAnchor.constraint(equalTo: generateLinkButton.bottomAnchor, constant: 16),
+            progressView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
+            progressView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+            progressView.heightAnchor.constraint(equalToConstant: 6),
             
-            // Activity indicator
-            activityIndicator.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
-            activityIndicator.centerYAnchor.constraint(equalTo: contentView.centerYAnchor)
+            // Progress label (above progress bar)
+            progressLabel.bottomAnchor.constraint(equalTo: progressView.topAnchor, constant: -8),
+            progressLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
+            progressLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+            
+            // Link output view (moved down to make room for progress)
+            linkOutputView.topAnchor.constraint(equalTo: progressView.bottomAnchor, constant: 16),
+            linkOutputView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
+            linkOutputView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+            linkOutputView.heightAnchor.constraint(equalToConstant: 80)
         ])
     }
     
@@ -430,7 +432,9 @@ class HomeViewController: UIViewController {
         NetworkService.shared.uploadFile(fileURL: fileURL, progressHandler: { progress in
             DispatchQueue.main.async {
                 self.progressView.progress = progress
-                self.progressLabel.text = "Uploading... \(Int(progress * 100))%"
+                let percentage = Int(progress * 100)
+                let fileSizeString = ByteCountFormatter.string(fromByteCount: fileSize, countStyle: .file)
+                self.progressLabel.text = "Uploading \(fileSizeString)... \(percentage)%"
             }
         }) { result in
             DispatchQueue.main.async {
