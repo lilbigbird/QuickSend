@@ -495,6 +495,11 @@ app.get("/auth/sync", auth.authenticateToken, async (req, res) => {
 
 // Optimized file upload endpoint with caching and concurrency handling
 app.post("/upload", uploadLimiter, (req, res, next) => {
+    console.log(`[Worker ${process.pid}] Upload request received`);
+    console.log(`[Worker ${process.pid}] Content-Type:`, req.headers['content-type']);
+    console.log(`[Worker ${process.pid}] Content-Length:`, req.headers['content-length']);
+    console.log(`[Worker ${process.pid}] User-Agent:`, req.headers['user-agent']);
+    
     const upload = multer({ 
         dest: uploadsDir,
         limits: {
@@ -807,12 +812,16 @@ app.get("/storage", async (req, res) => {
     }
 });
 
-// S3 Presigned Upload URL
-app.post('/s3/upload-url', auth.authenticateToken, async (req, res) => {
+// S3 Presigned Upload URL (works for both authenticated and unauthenticated users)
+app.post('/s3/upload-url', async (req, res) => {
   const { fileName, fileType } = req.body;
   if (!fileName || !fileType) {
     return res.status(400).json({ error: 'fileName and fileType are required' });
   }
+  
+  // Get user ID if authenticated, otherwise use 'anonymous'
+  const userId = req.user?.id || 'anonymous';
+  
   const fileId = uuidv4();
   const s3Key = `files/${fileId}/${fileName}`;
   const params = {
@@ -821,19 +830,20 @@ app.post('/s3/upload-url', auth.authenticateToken, async (req, res) => {
     Expires: 600, // 10 minutes
     ContentType: fileType,
     Metadata: {
-      uploadedBy: req.user.id || 'anonymous'
+      uploadedBy: userId
     }
   };
   try {
     const url = await s3.getSignedUrlPromise('putObject', params);
     res.json({ url, fileId, s3Key });
   } catch (err) {
+    console.error('S3 upload URL generation error:', err);
     res.status(500).json({ error: 'Failed to generate upload URL' });
   }
 });
 
-// S3 Presigned Download URL
-app.post('/s3/download-url', auth.authenticateToken, async (req, res) => {
+// S3 Presigned Download URL (works for both authenticated and unauthenticated users)
+app.post('/s3/download-url', async (req, res) => {
   const { s3Key } = req.body;
   if (!s3Key) {
     return res.status(400).json({ error: 's3Key is required' });
@@ -847,6 +857,7 @@ app.post('/s3/download-url', auth.authenticateToken, async (req, res) => {
     const url = await s3.getSignedUrlPromise('getObject', params);
     res.json({ url });
   } catch (err) {
+    console.error('S3 download URL generation error:', err);
     res.status(500).json({ error: 'Failed to generate download URL' });
   }
 });
