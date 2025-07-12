@@ -868,7 +868,10 @@ class NetworkService {
     
     // MARK: - Subscription Management
     func updateSubscription(tier: User.SubscriptionTier, completion: @escaping (Result<User, NetworkError>) -> Void) {
+        print("🔄 NetworkService: Updating subscription to \(tier.rawValue)")
+        
         guard let url = URL(string: "\(baseURL)/auth/update-subscription") else {
+            print("❌ NetworkService: Invalid URL for update-subscription")
             completion(.failure(.invalidURL))
             return
         }
@@ -880,6 +883,9 @@ class NetworkService {
         // Add authorization header if user is logged in
         if let token = UserManager.shared.authToken {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            print("✅ NetworkService: Auth token found and added to request")
+        } else {
+            print("❌ NetworkService: No auth token found")
         }
         
         let body = [
@@ -888,7 +894,9 @@ class NetworkService {
         
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
+            print("✅ NetworkService: Request body created with subscriptionTier: \(tier.rawValue)")
         } catch {
+            print("❌ NetworkService: Failed to create request body: \(error)")
             completion(.failure(.decodingError(error)))
             return
         }
@@ -896,27 +904,34 @@ class NetworkService {
         let task = URLSession.shared.dataTask(with: request) { data, response, error in
             DispatchQueue.main.async {
                 if let error = error {
+                    print("❌ NetworkService: Network error: \(error)")
                     completion(.failure(.networkError(error)))
                     return
                 }
                 
                 guard let httpResponse = response as? HTTPURLResponse else {
+                    print("❌ NetworkService: Invalid response")
                     completion(.failure(.invalidResponse))
                     return
                 }
                 
+                print("📡 NetworkService: Response status code: \(httpResponse.statusCode)")
+                
                 guard (200...299).contains(httpResponse.statusCode) else {
+                    print("❌ NetworkService: Server error with status: \(httpResponse.statusCode)")
                     completion(.failure(.serverError(httpResponse.statusCode)))
                     return
                 }
                 
                 guard let data = data else {
+                    print("❌ NetworkService: No data received")
                     completion(.failure(.noData))
                     return
                 }
                 
                 do {
                     let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+                    print("📄 NetworkService: Response JSON: \(json ?? [:])")
                     
                     if let success = json?["success"] as? Bool, success {
                         if let userData = json?["user"] as? [String: Any] {
@@ -930,15 +945,19 @@ class NetworkService {
                                 profilePictureData: nil,
                                 nextBillingDate: nil
                             )
+                            print("✅ NetworkService: Successfully parsed user with subscription: \(user.subscriptionTier.rawValue)")
                             completion(.success(user))
                         } else {
+                            print("❌ NetworkService: No user data in response")
                             completion(.failure(.invalidResponse))
                         }
                     } else {
                         let errorMessage = json?["error"] as? String ?? "Unknown error"
+                        print("❌ NetworkService: Backend error: \(errorMessage)")
                         completion(.failure(.serverError(400)))
                     }
                 } catch {
+                    print("❌ NetworkService: JSON parsing error: \(error)")
                     completion(.failure(.decodingError(error)))
                 }
             }
