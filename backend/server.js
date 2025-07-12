@@ -6,6 +6,8 @@ const path = require("path");
 const fs = require("fs");
 const { Pool } = require("pg");
 const AWS = require("aws-sdk");
+const rateLimit = require("express-rate-limit");
+const auth = require("./auth");
 require("dotenv").config();
 
 // Configure AWS S3
@@ -20,6 +22,19 @@ const S3_BUCKET_NAME = process.env.S3_BUCKET_NAME || 'quicksend-files';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Rate limiting
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 5, // limit each IP to 5 requests per windowMs for auth endpoints
+    message: { error: 'Too many authentication attempts, please try again later' }
+});
+
+const uploadLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000, // 1 hour
+    max: 10, // limit each IP to 10 uploads per hour
+    message: { error: 'Too many uploads, please try again later' }
+});
 
 // Middleware
 app.use(cors());
@@ -37,10 +52,13 @@ if (!fs.existsSync(uploadsDir)) {
     fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-// Initialize database table
+// Initialize database tables
 async function initializeDatabase() {
     try {
-        // First, create the table if it doesn't exist
+        // Initialize users table
+        await auth.initializeUsersTable();
+        
+        // First, create the files table if it doesn't exist
         const createTableQuery = `
             CREATE TABLE IF NOT EXISTS files (
                 id UUID PRIMARY KEY,
@@ -76,7 +94,7 @@ async function initializeDatabase() {
             }
         }
         
-        console.log('Database table initialized successfully');
+        console.log('Database tables initialized successfully');
     } catch (error) {
         console.error('Error initializing database:', error);
     }
@@ -113,8 +131,111 @@ app.get("/health", async (req, res) => {
     }
 });
 
+// Authentication endpoints
+app.post("/auth/signup", authLimiter, async (req, res) => {
+    try {
+        const { email, password, name, phone } = req.body;
+
+        // Validate input
+        if (!email || !password || !name) {
+            return res.status(400).json({ 
+                success: false, 
+                error: "Email, password, and name are required" 
+            });
+        }
+
+        if (password.length < 6) {
+            return res.status(400).json({ 
+                success: false, 
+                error: "Password must be at least 6 characters long" 
+            });
+        }
+
+        // Email validation
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            return res.status(400).json({ 
+                success: false, 
+                error: "Invalid email format" 
+            });
+        }
+
+        const result = await auth.registerUser(email, password, name, phone);
+        res.json(result);
+    } catch (error) {
+        console.error('Signup error:', error);
+        if (error.message === 'User already exists') {
+            res.status(409).json({ 
+                success: false, 
+                error: "User already exists" 
+            });
+        } else {
+            res.status(500).json({ 
+                success: false, 
+                error: "Registration failed" 
+            });
+        }
+    }
+});
+
+app.post("/auth/signin", authLimiter, async (req, res) => {
+    try {
+        const { email, password } = req.body;
+
+        // Validate input
+        if (!email || !password) {
+            return res.status(400).json({ 
+                success: false, 
+                error: "Email and password are required" 
+            });
+        }
+
+        const result = await auth.loginUser(email, password);
+        res.json(result);
+    } catch (error) {
+        console.error('Signin error:', error);
+        if (error.message === 'Invalid email or password') {
+            res.status(401).json({ 
+                success: false, 
+                error: "Invalid email or password" 
+            });
+        } else {
+            res.status(500).json({ 
+                success: false, 
+                error: "Login failed" 
+            });
+        }
+    }
+});
+
+// Protected route example - get user profile
+app.get("/auth/profile", auth.authenticateToken, async (req, res) => {
+    try {
+        const user = await auth.getUserById(req.user.id);
+        if (!user) {
+            return res.status(404).json({ error: "User not found" });
+        }
+        
+        res.json({
+            success: true,
+            user: {
+                id: user.id,
+                email: user.email,
+                name: user.name,
+                phone: user.phone,
+                subscriptionTier: user.subscription_tier,
+                createdAt: user.created_at,
+                lastSignIn: user.last_login
+            }
+        });
+    } catch (error) {
+        console.error('Profile error:', error);
+        res.status(500).json({ error: "Failed to get profile" });
+    }
+});
+
 // File upload endpoint with streaming for large files
-app.post("/upload", multer({ 
+app.post("/upload", uploadLimiter, multer({ 
     dest: uploadsDir,
     limits: {
         fileSize: 5 * 1024 * 1024 * 1024, // 5GB max
