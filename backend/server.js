@@ -138,7 +138,7 @@ app.post("/upload", multer({ dest: uploadsDir }).single("file"), async (req, res
 
         const downloadLink = `https://api.quicksend.vip/download/${fileId}`;
         
-        console.log(`Generated download link: ${downloadLink}`);
+        console.log(`Generated download link: ${downloadLink} - Using api.quicksend.vip domain`);
         
         res.json({
             success: true,
