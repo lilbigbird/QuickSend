@@ -873,7 +873,7 @@ app.post('/s3/upload-url', async (req, res) => {
         true,
         s3Key,
         S3_BUCKET_NAME,
-        userId,
+        userId === 'anonymous' ? null : userId, // Use null for anonymous users
         'pending'
       ]);
       console.log(`[Worker ${process.pid}] Created database record for fileId: ${fileId}`);
