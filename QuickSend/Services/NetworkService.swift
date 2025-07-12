@@ -87,7 +87,7 @@ class NetworkService {
                                     fileId: s3Response.fileId,
                                     downloadLink: "https://api.quicksend.vip/download/\(s3Response.fileId)",
                                     fileName: fileName,
-                                    fileSize: fileSize,
+                                    fileSize: Int(fileSize),
                                     expiresAt: ISO8601DateFormatter().string(from: Date().addingTimeInterval(7 * 24 * 60 * 60))
                                 )
                                 completion(.success(uploadResponse))
@@ -99,7 +99,7 @@ class NetworkService {
                                     fileId: s3Response.fileId,
                                     downloadLink: "https://api.quicksend.vip/download/\(s3Response.fileId)",
                                     fileName: fileName,
-                                    fileSize: fileSize,
+                                    fileSize: Int(fileSize),
                                     expiresAt: ISO8601DateFormatter().string(from: Date().addingTimeInterval(7 * 24 * 60 * 60))
                                 )
                                 completion(.success(uploadResponse))
