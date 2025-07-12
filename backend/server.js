@@ -716,6 +716,11 @@ app.get("/download/:fileId", async (req, res) => {
             console.log(`[Worker ${process.pid}] File upload failed: ${fileId}`);
             return res.status(500).json({ error: "File upload failed" });
         }
+        
+        // Handle legacy files with null status (treat as uploaded)
+        if (fileData.status === null && fileData.s3_key && fileData.s3_bucket) {
+            console.log(`[Worker ${process.pid}] Legacy file with null status, treating as uploaded: ${fileId}`);
+        }
 
         if (new Date() > new Date(fileData.expires_at)) {
             console.log(`[Worker ${process.pid}] File has expired: ${fileId}`);
