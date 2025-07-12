@@ -26,7 +26,7 @@ try {
     s3 = new AWS.S3({
         accessKeyId: process.env.AWS_ACCESS_KEY_ID,
         secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-        region: process.env.AWS_REGION || 'us-east-1',
+        region: process.env.AWS_REGION || 'us-east-2', // Changed from us-east-1 to us-east-2
         signatureVersion: 'v4',
         httpOptions: {
             timeout: 300000, // 5 minutes
@@ -39,6 +39,7 @@ try {
             base: 300 // Base delay for retries
         }
     });
+    console.log(`✅ S3 initialized with region: ${process.env.AWS_REGION || 'us-east-2'}`);
 } catch (error) {
     console.error('Error initializing S3:', error);
     s3 = null;
