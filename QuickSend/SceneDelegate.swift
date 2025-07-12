@@ -44,13 +44,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         // Use this method to undo the changes made on entering the background.
         
         // Sync user data from backend when app comes to foreground
-        UserManager.shared.syncUserDataFromBackend { success in
-            if success {
-                print("✅ Foreground sync completed successfully")
-            } else {
-                print("⚠️ Foreground sync failed or user not signed in")
-            }
-        }
+        UserManager.shared.syncUserDataFromBackend()
     }
 
     func sceneDidEnterBackground(_ scene: UIScene) {

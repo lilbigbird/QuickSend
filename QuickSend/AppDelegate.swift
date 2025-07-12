@@ -7,13 +7,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         // Override point for customization after application launch.
         
         // Sync user data from backend on app launch
-        UserManager.shared.syncUserDataFromBackend { success in
-            if success {
-                print("✅ App launch sync completed successfully")
-            } else {
-                print("⚠️ App launch sync failed or user not signed in")
-            }
-        }
+        UserManager.shared.syncUserDataFromBackend()
         
         return true
     }

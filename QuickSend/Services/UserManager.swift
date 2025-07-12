@@ -104,12 +104,7 @@ class UserManager {
     }
     
     func updateSubscriptionTier(_ tier: User.SubscriptionTier) {
-        guard let user = currentUser else { 
-            print("❌ No current user found for subscription update")
-            return 
-        }
-        
-        print("🔄 Updating subscription tier from \(user.subscriptionTier.rawValue) to \(tier.rawValue)")
+        guard let user = currentUser else { return }
         
         // Update local user immediately for responsive UI
         let nextBillingDate: Date?
@@ -132,18 +127,15 @@ class UserManager {
         )
         
         currentUser = updatedUser
-        print("✅ Local subscription updated to \(tier.rawValue)")
         
         // Sync with backend
-        print("🔄 Syncing subscription change with backend...")
         NetworkService.shared.updateSubscription(tier: tier) { result in
             switch result {
             case .success(let syncedUser):
                 // Update with the synced user data from backend
                 self.currentUser = syncedUser
-                print("✅ Backend subscription sync successful: \(syncedUser.subscriptionTier.rawValue)")
             case .failure(let error):
-                print("❌ Failed to sync subscription with backend: \(error)")
+                print("Failed to sync subscription with backend: \(error)")
                 // Keep the local update even if backend sync fails
             }
         }
@@ -229,10 +221,9 @@ class UserManager {
             case .success(let syncedUser):
                 // Update local user with synced data from backend
                 self.currentUser = syncedUser
-                print("✅ User data synced successfully from backend")
                 completion(true)
             case .failure(let error):
-                print("❌ Failed to sync user data: \(error)")
+                print("Failed to sync user data: \(error)")
                 completion(false)
             }
         }
