@@ -15,38 +15,10 @@ const helmet = require("helmet");
 const auth = require("./auth");
 require("dotenv").config();
 
-// Clustering for multi-core utilization (only in production)
-if (process.env.NODE_ENV === 'production' && cluster.isMaster) {
-    const numCPUs = os.cpus().length;
-    console.log(`Master ${process.pid} is running`);
-    console.log(`Starting ${numCPUs} workers...`);
-    
-    // Fork workers
-    for (let i = 0; i < numCPUs; i++) {
-        cluster.fork();
-    }
-    
-    cluster.on('exit', (worker, code, signal) => {
-        console.log(`Worker ${worker.process.pid} died`);
-        // Replace the dead worker
-        cluster.fork();
-    });
-    
-    // Monitor cluster health
-    setInterval(() => {
-        const workers = Object.keys(cluster.workers);
-        console.log(`Active workers: ${workers.length}`);
-    }, 30000);
-    
-    return;
-}
-
-// Worker process code (or single process in development)
-if (process.env.NODE_ENV === 'production') {
-    console.log(`Worker ${process.pid} started`);
-} else {
-    console.log(`Development server started`);
-}
+// Single process server (clustering disabled for now)
+console.log(`🚀 QuickSend server starting...`);
+console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
+console.log(`Process ID: ${process.pid}`);
 
 // Configure AWS S3 with optimized settings for high concurrency
 let s3;
@@ -833,7 +805,7 @@ app.post('/s3/download-url', auth.authenticateToken, async (req, res) => {
 });
 
 // Start server immediately
-const server = app.listen(PORT, '0.0.0.0', () => {
+const server = app.listen(PORT, '0.0.0.0', async () => {
     console.log(`🚀 QuickSend API server running on port ${PORT}`);
     console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
     console.log(`Upload endpoint: /upload`);
@@ -841,14 +813,13 @@ const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`Health check: /health`);
     console.log(`Root endpoint: /`);
     
-    // Initialize database in background
-    setTimeout(() => {
-        initializeDatabase().then(() => {
-            console.log(`✅ Database connected and initialized`);
-        }).catch(err => {
-            console.error('❌ Database initialization failed:', err);
-        });
-    }, 1000);
+    // Initialize database
+    try {
+        await initializeDatabase();
+        console.log(`✅ Database connected and initialized`);
+    } catch (err) {
+        console.error('❌ Database initialization failed:', err);
+    }
 });
 
 // Handle server errors
