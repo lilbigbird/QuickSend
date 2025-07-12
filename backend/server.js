@@ -219,14 +219,46 @@ async function initializeDatabase() {
                 created_at TIMESTAMPTZ DEFAULT NOW(),
                 status VARCHAR(50) NOT NULL DEFAULT 'pending'
             );
-            
-            -- Create indexes for better query performance
-            CREATE INDEX IF NOT EXISTS idx_files_user_id ON files(user_id);
-            CREATE INDEX IF NOT EXISTS idx_files_expires_at ON files(expires_at);
-            CREATE INDEX IF NOT EXISTS idx_files_is_active ON files(is_active);
-            CREATE INDEX IF NOT EXISTS idx_files_upload_date ON files(upload_date);
         `;
         await pool.query(createTableQuery);
+        
+        // Add missing columns if they don't exist (migration)
+        try {
+            await pool.query('ALTER TABLE files ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id)');
+        } catch (error) {
+            console.log('user_id column already exists or error adding it:', error.message);
+        }
+        
+        try {
+            await pool.query('ALTER TABLE files ADD COLUMN IF NOT EXISTS status VARCHAR(50) NOT NULL DEFAULT \'pending\'');
+        } catch (error) {
+            console.log('status column already exists or error adding it:', error.message);
+        }
+        
+        // Create indexes for better query performance (ignore errors if they exist)
+        try {
+            await pool.query('CREATE INDEX IF NOT EXISTS idx_files_user_id ON files(user_id)');
+        } catch (error) {
+            console.log('user_id index already exists or error creating it:', error.message);
+        }
+        
+        try {
+            await pool.query('CREATE INDEX IF NOT EXISTS idx_files_expires_at ON files(expires_at)');
+        } catch (error) {
+            console.log('expires_at index already exists or error creating it:', error.message);
+        }
+        
+        try {
+            await pool.query('CREATE INDEX IF NOT EXISTS idx_files_is_active ON files(is_active)');
+        } catch (error) {
+            console.log('is_active index already exists or error creating it:', error.message);
+        }
+        
+        try {
+            await pool.query('CREATE INDEX IF NOT EXISTS idx_files_upload_date ON files(upload_date)');
+        } catch (error) {
+            console.log('upload_date index already exists or error creating it:', error.message);
+        }
         
         console.log('Database tables and indexes initialized successfully');
     } catch (error) {
