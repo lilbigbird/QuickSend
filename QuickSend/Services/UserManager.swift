@@ -6,6 +6,7 @@ class UserManager {
     private let userDefaults = UserDefaults.standard
     private let currentUserKey = "currentUser"
     private let isSignedInKey = "isSignedIn"
+    private let authTokenKey = "authToken"
     
     private init() {}
     
@@ -34,12 +35,26 @@ class UserManager {
         return userDefaults.bool(forKey: isSignedInKey) && currentUser != nil
     }
     
+    var authToken: String? {
+        get {
+            return userDefaults.string(forKey: authTokenKey)
+        }
+        set {
+            if let token = newValue {
+                userDefaults.set(token, forKey: authTokenKey)
+            } else {
+                userDefaults.removeObject(forKey: authTokenKey)
+            }
+        }
+    }
+    
     // MARK: - Authentication Methods
     func signIn(email: String, password: String, completion: @escaping (Result<User, Error>) -> Void) {
         NetworkService.shared.signIn(email: email, password: password) { result in
             switch result {
-            case .success(let user):
+            case .success(let (user, token)):
                 self.currentUser = user
+                self.authToken = token
                 
                 // Sync subscription data from backend
                 NetworkService.shared.syncUserData { syncResult in
@@ -85,6 +100,7 @@ class UserManager {
     
     func signOut() {
         currentUser = nil
+        authToken = nil
     }
     
     func updateSubscriptionTier(_ tier: User.SubscriptionTier) {

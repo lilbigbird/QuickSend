@@ -581,7 +581,7 @@ class NetworkService {
     }
     
     // MARK: - Authentication
-    func signIn(email: String, password: String, completion: @escaping (Result<User, NetworkError>) -> Void) {
+    func signIn(email: String, password: String, completion: @escaping (Result<(User, String), NetworkError>) -> Void) {
         guard let url = URL(string: "\(baseURL)/auth/signin") else {
             completion(.failure(.invalidURL))
             return
@@ -633,7 +633,8 @@ class NetworkService {
                     let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
                     
                     if let success = json?["success"] as? Bool, success {
-                        if let userData = json?["user"] as? [String: Any] {
+                        if let userData = json?["user"] as? [String: Any],
+                           let token = json?["token"] as? String {
                             let user = User(
                                 id: userData["id"] as? String ?? UUID().uuidString,
                                 email: userData["email"] as? String ?? email,
@@ -644,7 +645,7 @@ class NetworkService {
                                 profilePictureData: nil,
                                 nextBillingDate: nil
                             )
-                            completion(.success(user))
+                            completion(.success((user, token)))
                         } else {
                             completion(.failure(.invalidResponse))
                         }
@@ -877,8 +878,8 @@ class NetworkService {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
         // Add authorization header if user is logged in
-        if let user = UserManager.shared.currentUser {
-            request.setValue("Bearer \(user.id)", forHTTPHeaderField: "Authorization")
+        if let token = UserManager.shared.authToken {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         
         let body = [
@@ -957,8 +958,8 @@ class NetworkService {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
         // Add authorization header if user is logged in
-        if let user = UserManager.shared.currentUser {
-            request.setValue("Bearer \(user.id)", forHTTPHeaderField: "Authorization")
+        if let token = UserManager.shared.authToken {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         
         let task = URLSession.shared.dataTask(with: request) { data, response, error in
