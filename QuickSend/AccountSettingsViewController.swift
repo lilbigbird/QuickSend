@@ -83,7 +83,7 @@ class AccountSettingsViewController: UIViewController {
     // MARK: - Properties
     private var tableTopConstraint: NSLayoutConstraint?
     private let settingsData = [
-        ["Personal Information", "Email & Password"],
+        ["Personal Information", "Email & Password", "Sync Account"],
         ["Subscriptions", "Manage Subscription", "Billing History"],
         ["Notifications", "Storage Usage", "About QuickSend", "Rate App", "Sign Out"]
     ]
@@ -354,6 +354,8 @@ class AccountSettingsViewController: UIViewController {
             navigationController?.pushViewController(personalInfoVC, animated: true)
         case "Email & Password":
             showEmailPasswordSettings()
+        case "Sync Account":
+            syncAccountData()
         case "Subscriptions":
             let subscriptionVC = SubscriptionViewController()
             let navController = UINavigationController(rootViewController: subscriptionVC)
@@ -505,6 +507,43 @@ class AccountSettingsViewController: UIViewController {
         alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
         
         present(alert, animated: true)
+    }
+    
+    private func syncAccountData() {
+        // Show loading indicator
+        let loadingAlert = UIAlertController(title: "Syncing Account", message: "Please wait while we sync your account data...", preferredStyle: .alert)
+        present(loadingAlert, animated: true)
+        
+        // Perform sync
+        UserManager.shared.syncUserDataFromBackend { success in
+            DispatchQueue.main.async {
+                // Dismiss loading alert
+                loadingAlert.dismiss(animated: true) {
+                    if success {
+                        // Update UI with synced data
+                        self.updateUserInfo()
+                        
+                        // Show success message
+                        let successAlert = UIAlertController(
+                            title: "Sync Complete",
+                            message: "Your account data has been successfully synced from the server.",
+                            preferredStyle: .alert
+                        )
+                        successAlert.addAction(UIAlertAction(title: "OK", style: .default))
+                        self.present(successAlert, animated: true)
+                    } else {
+                        // Show error message
+                        let errorAlert = UIAlertController(
+                            title: "Sync Failed",
+                            message: "Unable to sync account data. Please check your internet connection and try again.",
+                            preferredStyle: .alert
+                        )
+                        errorAlert.addAction(UIAlertAction(title: "OK", style: .default))
+                        self.present(errorAlert, animated: true)
+                    }
+                }
+            }
+        }
     }
     
     private func showComingSoon(_ feature: String) {

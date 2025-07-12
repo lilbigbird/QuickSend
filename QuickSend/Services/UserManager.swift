@@ -207,4 +207,26 @@ class UserManager {
     func getMaxExpiryDays() -> Int {
         return currentUser?.subscriptionTier.maxExpiryDays ?? User.SubscriptionTier.free.maxExpiryDays
     }
+    
+    // MARK: - Data Synchronization
+    func syncUserDataFromBackend(completion: @escaping (Bool) -> Void = { _ in }) {
+        // Only sync if user is signed in
+        guard isSignedIn, let _ = authToken else {
+            completion(false)
+            return
+        }
+        
+        NetworkService.shared.syncUserData { result in
+            switch result {
+            case .success(let syncedUser):
+                // Update local user with synced data from backend
+                self.currentUser = syncedUser
+                print("✅ User data synced successfully from backend")
+                completion(true)
+            case .failure(let error):
+                print("❌ Failed to sync user data: \(error)")
+                completion(false)
+            }
+        }
+    }
 } 
