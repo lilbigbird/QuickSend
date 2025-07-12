@@ -686,38 +686,7 @@ app.get("/download/:fileId", async (req, res) => {
             
             fileData = result.rows[0];
             
-            // If file size is 0, try to get it from S3 metadata
-            if (fileData.size === 0 && fileData.s3_key && fileData.s3_bucket) {
-                try {
-                    console.log(`[Worker ${process.pid}] Attempting to get file size from S3 for: ${fileId}`);
-                    const s3Params = {
-                        Bucket: fileData.s3_bucket,
-                        Key: fileData.s3_key
-                    };
-                    const s3Object = await s3.headObject(s3Params).promise();
-                    const actualSize = s3Object.ContentLength || 0;
-                    
-                    console.log(`[Worker ${process.pid}] S3 metadata for ${fileId}:`, {
-                        contentLength: s3Object.ContentLength,
-                        contentType: s3Object.ContentType,
-                        lastModified: s3Object.LastModified,
-                        etag: s3Object.ETag
-                    });
-                    
-                    if (actualSize > 0) {
-                        // Update database with actual file size
-                        await pool.query('UPDATE files SET size = $1, status = $2 WHERE id = $3', [actualSize, 'uploaded', fileId]);
-                        fileData.size = actualSize;
-                        fileData.status = 'uploaded';
-                        console.log(`[Worker ${process.pid}] Updated file size from S3: ${fileId} -> ${actualSize} bytes`);
-                    } else {
-                        console.log(`[Worker ${process.pid}] S3 object exists but has no content length: ${fileId}`);
-                    }
-                } catch (s3Error) {
-                    console.error(`[Worker ${process.pid}] Error getting S3 metadata:`, s3Error);
-                    // Continue with existing data
-                }
-            }
+
             
             // Cache the file metadata for 1 hour (only if Redis is available)
             if (redisClient) {
@@ -900,33 +869,7 @@ app.post('/s3/upload-url', async (req, res) => {
     const url = await s3.getSignedUrlPromise('putObject', params);
     console.log(`[Worker ${process.pid}] Generated S3 upload URL for fileId: ${fileId}`);
     
-    // Create database record for the file (pending status)
-    const uploadDate = new Date();
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
-    
-    try {
-      const insertQuery = `
-        INSERT INTO files (id, original_name, size, upload_date, expires_at, download_count, is_active, s3_key, s3_bucket, user_id, status)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-      `;
-      await pool.query(insertQuery, [
-        fileId,
-        fileName,
-        0, // Size will be updated after upload
-        uploadDate,
-        expiresAt,
-        0,
-        true,
-        s3Key,
-        S3_BUCKET_NAME,
-        userId === 'anonymous' ? null : userId, // Use null for anonymous users
-        'pending'
-      ]);
-      console.log(`[Worker ${process.pid}] Created database record for fileId: ${fileId}`);
-    } catch (dbError) {
-      console.error(`[Worker ${process.pid}] Error creating database record:`, dbError);
-      // Continue anyway - the file can still be uploaded to S3
-    }
+
     
     res.json({ url, fileId, s3Key });
   } catch (err) {
@@ -955,31 +898,7 @@ app.post('/s3/download-url', async (req, res) => {
   }
 });
 
-// Confirm S3 upload and update file metadata
-app.post('/s3/upload-complete', async (req, res) => {
-  const { fileId, fileSize } = req.body;
-  if (!fileId || !fileSize) {
-    return res.status(400).json({ error: 'fileId and fileSize are required' });
-  }
-  
-  console.log(`[Worker ${process.pid}] Upload complete request for fileId: ${fileId}, size: ${fileSize}`);
-  
-  try {
-    // Update the database record with the actual file size and mark as uploaded
-    const updateQuery = `
-      UPDATE files 
-      SET size = $1, status = 'uploaded' 
-      WHERE id = $2
-    `;
-    await pool.query(updateQuery, [fileSize, fileId]);
-    
-    console.log(`[Worker ${process.pid}] Updated file metadata for fileId: ${fileId}`);
-    res.json({ success: true, message: 'Upload confirmed' });
-  } catch (err) {
-    console.error(`[Worker ${process.pid}] Error updating file metadata:`, err);
-    res.status(500).json({ error: 'Failed to update file metadata' });
-  }
-});
+
 
 // Start server immediately
 const server = app.listen(PORT, '0.0.0.0', async () => {
