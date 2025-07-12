@@ -74,16 +74,37 @@ class NetworkService {
                     switch uploadResult {
                     case .success:
                         print("✅ S3 upload successful for file: \(fileName)")
-                        // Step 3: Create a mock UploadResponse for compatibility
-                        let uploadResponse = UploadResponse(
-                            success: true,
-                            fileId: s3Response.fileId,
-                            downloadLink: "https://api.quicksend.vip/download/\(s3Response.fileId)",
-                            fileName: fileName,
-                            fileSize: 0, // We'll need to get this from the file
-                            expiresAt: ISO8601DateFormatter().string(from: Date().addingTimeInterval(7 * 24 * 60 * 60))
-                        )
-                        completion(.success(uploadResponse))
+                        
+                        // Step 3: Get file size and confirm upload
+                        let fileSize = self?.getFileSize(fileURL: fileURL) ?? 0
+                        self?.confirmS3Upload(fileId: s3Response.fileId, fileSize: fileSize) { confirmResult in
+                            switch confirmResult {
+                            case .success:
+                                print("✅ Upload confirmed for file: \(fileName)")
+                                // Step 4: Create UploadResponse for compatibility
+                                let uploadResponse = UploadResponse(
+                                    success: true,
+                                    fileId: s3Response.fileId,
+                                    downloadLink: "https://api.quicksend.vip/download/\(s3Response.fileId)",
+                                    fileName: fileName,
+                                    fileSize: fileSize,
+                                    expiresAt: ISO8601DateFormatter().string(from: Date().addingTimeInterval(7 * 24 * 60 * 60))
+                                )
+                                completion(.success(uploadResponse))
+                            case .failure(let error):
+                                print("⚠️ Upload confirmation failed for file: \(fileName), but upload was successful")
+                                // Still return success since the file was uploaded to S3
+                                let uploadResponse = UploadResponse(
+                                    success: true,
+                                    fileId: s3Response.fileId,
+                                    downloadLink: "https://api.quicksend.vip/download/\(s3Response.fileId)",
+                                    fileName: fileName,
+                                    fileSize: fileSize,
+                                    expiresAt: ISO8601DateFormatter().string(from: Date().addingTimeInterval(7 * 24 * 60 * 60))
+                                )
+                                completion(.success(uploadResponse))
+                            }
+                        }
                     case .failure(let error):
                         print("❌ S3 upload failed for file: \(fileName), error: \(error)")
                         completion(.failure(error))
@@ -136,6 +157,84 @@ class NetworkService {
         default:
             return nil
         }
+    }
+    
+    // Helper function to get file size
+    private func getFileSize(fileURL: URL) -> Int64 {
+        if fileURL.startAccessingSecurityScopedResource() {
+            defer { fileURL.stopAccessingSecurityScopedResource() }
+            
+            if let resourceValues = try? fileURL.resourceValues(forKeys: [.fileSizeKey]) {
+                return Int64(resourceValues.fileSize ?? 0)
+            }
+            
+            if let attributes = try? FileManager.default.attributesOfItem(atPath: fileURL.path) {
+                return attributes[.size] as? Int64 ?? 0
+            }
+        } else {
+            if let resourceValues = try? fileURL.resourceValues(forKeys: [.fileSizeKey]) {
+                return Int64(resourceValues.fileSize ?? 0)
+            }
+            
+            if let attributes = try? FileManager.default.attributesOfItem(atPath: fileURL.path) {
+                return attributes[.size] as? Int64 ?? 0
+            }
+        }
+        
+        return 0
+    }
+    
+    // Confirm S3 upload and update file metadata
+    private func confirmS3Upload(fileId: String, fileSize: Int64, completion: @escaping (Result<Void, NetworkError>) -> Void) {
+        guard let url = URL(string: "\(baseURL)/s3/upload-complete") else {
+            completion(.failure(.invalidURL))
+            return
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        let body: [String: Any] = [
+            "fileId": fileId,
+            "fileSize": fileSize
+        ]
+        
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+            print("📤 Confirming upload for fileId: \(fileId), size: \(fileSize)")
+        } catch {
+            completion(.failure(.encodingError))
+            return
+        }
+        
+        let task = optimizedSession.dataTask(with: request) { data, response, error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    print("❌ Upload confirmation error: \(error)")
+                    completion(.failure(.networkError(error)))
+                    return
+                }
+                
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    completion(.failure(.invalidResponse))
+                    return
+                }
+                
+                guard (200...299).contains(httpResponse.statusCode) else {
+                    if let data = data, let responseString = String(data: data, encoding: .utf8) {
+                        print("❌ Upload confirmation failed: \(responseString)")
+                    }
+                    completion(.failure(.serverError(httpResponse.statusCode)))
+                    return
+                }
+                
+                print("✅ Upload confirmation successful")
+                completion(.success(()))
+            }
+        }
+        
+        task.resume()
     }
     
     // MARK: - File Upload (S3) with Concurrency Management (Legacy method)

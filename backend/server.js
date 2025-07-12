@@ -911,6 +911,32 @@ app.post('/s3/download-url', async (req, res) => {
   }
 });
 
+// Confirm S3 upload and update file metadata
+app.post('/s3/upload-complete', async (req, res) => {
+  const { fileId, fileSize } = req.body;
+  if (!fileId || !fileSize) {
+    return res.status(400).json({ error: 'fileId and fileSize are required' });
+  }
+  
+  console.log(`[Worker ${process.pid}] Upload complete request for fileId: ${fileId}, size: ${fileSize}`);
+  
+  try {
+    // Update the database record with the actual file size and mark as uploaded
+    const updateQuery = `
+      UPDATE files 
+      SET size = $1, status = 'uploaded' 
+      WHERE id = $2
+    `;
+    await pool.query(updateQuery, [fileSize, fileId]);
+    
+    console.log(`[Worker ${process.pid}] Updated file metadata for fileId: ${fileId}`);
+    res.json({ success: true, message: 'Upload confirmed' });
+  } catch (err) {
+    console.error(`[Worker ${process.pid}] Error updating file metadata:`, err);
+    res.status(500).json({ error: 'Failed to update file metadata' });
+  }
+});
+
 // Start server immediately
 const server = app.listen(PORT, '0.0.0.0', async () => {
     console.log(`🚀 QuickSend API server running on port ${PORT}`);
