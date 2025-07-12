@@ -755,11 +755,29 @@ struct HealthResponse: Codable {
 }
 
 struct StorageInfoResponse: Codable {
-    let usedStorage: Int64
-    let totalStorage: Int64
     let totalFiles: Int
-    let activeFiles: Int
-    let expiredFiles: Int
+    let totalSizeBytes: Int64
+    let totalSizeMB: String
+    let totalSizeGB: String
+    let lastUpdated: String
+    
+    // Computed properties for backward compatibility
+    var usedStorage: Int64 {
+        return totalSizeBytes
+    }
+    
+    var totalStorage: Int64 {
+        // Default to 100MB for free tier, can be overridden
+        return 100 * 1024 * 1024
+    }
+    
+    var activeFiles: Int {
+        return totalFiles // Assuming all files are active for now
+    }
+    
+    var expiredFiles: Int {
+        return 0 // We'll need to calculate this separately if needed
+    }
 }
 
 struct FileInfoResponse: Codable {
