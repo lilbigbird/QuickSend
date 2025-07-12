@@ -136,7 +136,7 @@ app.post("/upload", multer({ dest: uploadsDir }).single("file"), async (req, res
             S3_BUCKET_NAME
         ]);
 
-        const downloadLink = `https://quicksend-backend.onrender.com/download/${fileId}`;
+        const downloadLink = `https://api.quicksend.vip/download/${fileId}`;
         
         console.log(`Generated download link: ${downloadLink}`);
         

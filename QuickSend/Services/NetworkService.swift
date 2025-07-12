@@ -9,7 +9,7 @@ class NetworkService {
     // private let baseURL = "http://192.168.1.30:3000" // Your Mac's IP address for real device
     
     // For production (App Store)
-    private let baseURL = "https://quicksend-backend.onrender.com" // Your Render backend
+    private let baseURL = "https://api.quicksend.vip" // Your custom domain
     
     private init() {}
     

@@ -128,6 +128,8 @@ class HomeViewController: UIViewController {
         button.backgroundColor = UIColor.systemGreen
         button.setTitleColor(.white, for: .normal)
         button.layer.cornerRadius = 8
+        button.isUserInteractionEnabled = true
+        button.isHidden = true
         button.translatesAutoresizingMaskIntoConstraints = false
         return button
     }()
@@ -139,6 +141,8 @@ class HomeViewController: UIViewController {
         button.backgroundColor = UIColor.systemOrange
         button.setTitleColor(.white, for: .normal)
         button.layer.cornerRadius = 8
+        button.isUserInteractionEnabled = true
+        button.isHidden = true
         button.translatesAutoresizingMaskIntoConstraints = false
         return button
     }()
@@ -258,14 +262,16 @@ class HomeViewController: UIViewController {
         view.addSubview(selectedFileLabel)
         view.addSubview(generateLinkButton)
         
+        // Move link output view and buttons outside scroll view
+        view.addSubview(linkOutputView)
+        view.addSubview(copyLinkButton)
+        view.addSubview(shareButton)
+        
         contentView.addSubview(progressView)
         contentView.addSubview(progressLabel)
-        contentView.addSubview(linkOutputView)
         contentView.addSubview(activityIndicator)
         
         linkOutputView.addSubview(linkLabel)
-        linkOutputView.addSubview(copyLinkButton)
-        linkOutputView.addSubview(shareButton)
         
         // Setup scroll view
         scrollView.translatesAutoresizingMaskIntoConstraints = false
@@ -280,8 +286,8 @@ class HomeViewController: UIViewController {
     
     private func setupConstraints() {
         NSLayoutConstraint.activate([
-            // Scroll view (starts below the fixed content)
-            scrollView.topAnchor.constraint(equalTo: generateLinkButton.bottomAnchor, constant: 20),
+            // Scroll view (starts below the buttons)
+            scrollView.topAnchor.constraint(equalTo: shareButton.bottomAnchor, constant: 20),
             scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             scrollView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
@@ -331,8 +337,31 @@ class HomeViewController: UIViewController {
             generateLinkButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
             generateLinkButton.heightAnchor.constraint(equalToConstant: 50),
             
+            // Link output view (outside scroll view)
+            linkOutputView.topAnchor.constraint(equalTo: generateLinkButton.bottomAnchor, constant: 20),
+            linkOutputView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
+            linkOutputView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+            linkOutputView.heightAnchor.constraint(equalToConstant: 80),
+            
+            // Link label
+            linkLabel.topAnchor.constraint(equalTo: linkOutputView.topAnchor, constant: 16),
+            linkLabel.leadingAnchor.constraint(equalTo: linkOutputView.leadingAnchor, constant: 16),
+            linkLabel.trailingAnchor.constraint(equalTo: linkOutputView.trailingAnchor, constant: -16),
+            
+            // Copy link button (outside scroll view)
+            copyLinkButton.topAnchor.constraint(equalTo: linkOutputView.bottomAnchor, constant: 16),
+            copyLinkButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
+            copyLinkButton.widthAnchor.constraint(equalTo: view.widthAnchor, multiplier: 0.45),
+            copyLinkButton.heightAnchor.constraint(equalToConstant: 40),
+            
+            // Share button (outside scroll view)
+            shareButton.topAnchor.constraint(equalTo: linkOutputView.bottomAnchor, constant: 16),
+            shareButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+            shareButton.widthAnchor.constraint(equalTo: view.widthAnchor, multiplier: 0.45),
+            shareButton.heightAnchor.constraint(equalToConstant: 40),
+            
             // Progress view
-            progressView.topAnchor.constraint(equalTo: generateLinkButton.bottomAnchor, constant: 16),
+            progressView.topAnchor.constraint(equalTo: shareButton.bottomAnchor, constant: 20),
             progressView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
             progressView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
             progressView.heightAnchor.constraint(equalToConstant: 4),
@@ -341,30 +370,6 @@ class HomeViewController: UIViewController {
             progressLabel.topAnchor.constraint(equalTo: progressView.bottomAnchor, constant: 8),
             progressLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
             progressLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
-            
-            // Link output view
-            linkOutputView.topAnchor.constraint(equalTo: progressLabel.bottomAnchor, constant: 20),
-            linkOutputView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
-            linkOutputView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
-            linkOutputView.heightAnchor.constraint(equalToConstant: 120),
-            
-            // Link label
-            linkLabel.topAnchor.constraint(equalTo: linkOutputView.topAnchor, constant: 16),
-            linkLabel.leadingAnchor.constraint(equalTo: linkOutputView.leadingAnchor, constant: 16),
-            linkLabel.trailingAnchor.constraint(equalTo: linkOutputView.trailingAnchor, constant: -16),
-            
-            // Copy link button
-            copyLinkButton.topAnchor.constraint(equalTo: linkLabel.bottomAnchor, constant: 16),
-            copyLinkButton.leadingAnchor.constraint(equalTo: linkOutputView.leadingAnchor, constant: 16),
-            copyLinkButton.widthAnchor.constraint(equalTo: linkOutputView.widthAnchor, multiplier: 0.45),
-            copyLinkButton.heightAnchor.constraint(equalToConstant: 40),
-            copyLinkButton.bottomAnchor.constraint(equalTo: linkOutputView.bottomAnchor, constant: -16),
-            
-            // Share button
-            shareButton.topAnchor.constraint(equalTo: linkLabel.bottomAnchor, constant: 16),
-            shareButton.trailingAnchor.constraint(equalTo: linkOutputView.trailingAnchor, constant: -16),
-            shareButton.widthAnchor.constraint(equalTo: linkOutputView.widthAnchor, multiplier: 0.45),
-            shareButton.heightAnchor.constraint(equalToConstant: 40),
             
             // Activity indicator
             activityIndicator.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
@@ -540,6 +545,19 @@ class HomeViewController: UIViewController {
     private func showLinkOutput() {
         linkLabel.text = generatedLink
         linkOutputView.isHidden = false
+        
+        // Show and enable buttons
+        copyLinkButton.isHidden = false
+        shareButton.isHidden = false
+        copyLinkButton.isEnabled = true
+        shareButton.isEnabled = true
+        copyLinkButton.alpha = 1.0
+        shareButton.alpha = 1.0
+        copyLinkButton.isUserInteractionEnabled = true
+        shareButton.isUserInteractionEnabled = true
+        
+        // Force layout update
+        linkOutputView.layoutIfNeeded()
     }
     
     private func updateFileSelection(fileName: String) {
