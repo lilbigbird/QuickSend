@@ -39,6 +39,7 @@ if (!fs.existsSync(uploadsDir)) {
 // Initialize database table
 async function initializeDatabase() {
     try {
+        // First, create the table if it doesn't exist
         const createTableQuery = `
             CREATE TABLE IF NOT EXISTS files (
                 id UUID PRIMARY KEY,
@@ -47,12 +48,33 @@ async function initializeDatabase() {
                 upload_date TIMESTAMPTZ NOT NULL,
                 expires_at TIMESTAMPTZ NOT NULL,
                 download_count INTEGER NOT NULL DEFAULT 0,
-                is_active BOOLEAN NOT NULL DEFAULT TRUE,
-                s3_key TEXT,
-                s3_bucket TEXT
+                is_active BOOLEAN NOT NULL DEFAULT TRUE
             );
         `;
         await pool.query(createTableQuery);
+        
+        // Check if s3_key column exists, if not add it
+        try {
+            await pool.query('SELECT s3_key FROM files LIMIT 1');
+            console.log('s3_key column already exists');
+        } catch (error) {
+            if (error.code === '42703') { // Column doesn't exist
+                console.log('Adding s3_key column to files table');
+                await pool.query('ALTER TABLE files ADD COLUMN s3_key TEXT');
+            }
+        }
+        
+        // Check if s3_bucket column exists, if not add it
+        try {
+            await pool.query('SELECT s3_bucket FROM files LIMIT 1');
+            console.log('s3_bucket column already exists');
+        } catch (error) {
+            if (error.code === '42703') { // Column doesn't exist
+                console.log('Adding s3_bucket column to files table');
+                await pool.query('ALTER TABLE files ADD COLUMN s3_bucket TEXT');
+            }
+        }
+        
         console.log('Database table initialized successfully');
     } catch (error) {
         console.error('Error initializing database:', error);
