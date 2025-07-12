@@ -216,7 +216,8 @@ async function initializeDatabase() {
                 s3_key TEXT,
                 s3_bucket TEXT,
                 user_id UUID REFERENCES users(id),
-                created_at TIMESTAMPTZ DEFAULT NOW()
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                status VARCHAR(50) NOT NULL DEFAULT 'pending'
             );
             
             -- Create indexes for better query performance
@@ -449,98 +450,27 @@ app.post("/upload", uploadLimiter, multer({
     }
 }).single("file"), async (req, res) => {
     const startTime = Date.now();
-    
+    let fileId, s3Key, userId, uploadDate, expiresAt;
+
     try {
         if (!req.file) {
             return res.status(400).json({ error: "No file uploaded" });
         }
 
-        const fileId = uuidv4();
-        const uploadDate = new Date();
-        const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
-        const userId = req.user?.id || null; // Get user ID if authenticated
+        fileId = uuidv4();
+        uploadDate = new Date();
+        expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+        userId = req.user?.id || null;
 
-        console.log(`[Worker ${process.pid}] Uploading file: ${req.file.originalname} (${req.file.size} bytes)`);
-
-        // Check Redis cache for duplicate file (optional optimization)
-        const fileHash = `${req.file.size}_${req.file.originalname}`;
-        const cacheKey = `file_upload:${fileHash}`;
-        const cachedFileId = await redisClient.get(cacheKey);
-        
-        if (cachedFileId) {
-            console.log(`[Worker ${process.pid}] Found cached file, reusing fileId: ${cachedFileId}`);
-            
-            // Update download count and return cached link
-            await pool.query('UPDATE files SET download_count = download_count + 1 WHERE id = $1', [cachedFileId]);
-            
-            const downloadLink = `https://api.quicksend.vip/download/${cachedFileId}`;
-            
-            res.json({
-                success: true,
-                fileId: cachedFileId,
-                downloadLink: downloadLink,
-                fileName: req.file.originalname,
-                fileSize: req.file.size,
-                expiresAt: expiresAt.toISOString(),
-                cached: true,
-                uploadTime: `${Date.now() - startTime}ms`
-            });
-            return;
-        }
-
-        // Upload to AWS S3 with streaming and retry logic
-        const s3Key = `files/${fileId}/${req.file.originalname}`;
-        let s3Result;
-        
-        const uploadWithRetry = async (retries = 3) => {
-            for (let attempt = 1; attempt <= retries; attempt++) {
-                try {
-                    const uploadParams = {
-                        Bucket: S3_BUCKET_NAME,
-                        Key: s3Key,
-                        Body: fs.createReadStream(req.file.path),
-                        ContentType: req.file.mimetype || 'application/octet-stream',
-                        Metadata: {
-                            originalName: req.file.originalname,
-                            fileId: fileId,
-                            uploadedBy: userId || 'anonymous'
-                        }
-                    };
-                    
-                    // Use managed upload for better performance with large files
-                    if (req.file.size > 100 * 1024 * 1024) { // 100MB threshold
-                        s3Result = await s3UploadManager.upload(uploadParams).promise();
-                    } else {
-                        s3Result = await s3.upload(uploadParams).promise();
-                    }
-                    
-                    console.log(`[Worker ${process.pid}] File uploaded to S3 on attempt ${attempt}: ${s3Result.Location}`);
-                    return s3Result;
-                } catch (s3Error) {
-                    console.error(`[Worker ${process.pid}] S3 upload attempt ${attempt} failed:`, s3Error);
-                    if (attempt === retries) throw s3Error;
-                    await new Promise(resolve => setTimeout(resolve, 1000 * attempt)); // Exponential backoff
-                }
-            }
-        };
-
-        try {
-            await uploadWithRetry();
-        } catch (s3Error) {
-            console.error(`[Worker ${process.pid}] All S3 upload attempts failed:`, s3Error);
-            return res.status(500).json({ error: "Failed to upload file to S3" });
-        }
-
-        // Insert file metadata into database with transaction
+        // Insert file metadata into database with status 'pending'
         const client = await pool.connect();
         try {
             await client.query('BEGIN');
-            
             const insertQuery = `
-                INSERT INTO files (id, original_name, size, upload_date, expires_at, download_count, is_active, s3_key, s3_bucket, user_id)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                INSERT INTO files (id, original_name, size, upload_date, expires_at, download_count, is_active, s3_key, s3_bucket, user_id, status)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             `;
-            
+            s3Key = `files/${fileId}/${req.file.originalname}`;
             await client.query(insertQuery, [
                 fileId,
                 req.file.originalname,
@@ -551,16 +481,12 @@ app.post("/upload", uploadLimiter, multer({
                 true,
                 s3Key,
                 S3_BUCKET_NAME,
-                userId
+                userId,
+                'pending'
             ]);
-
-            // Cache the file for potential reuse
-            await redisClient.setex(cacheKey, 3600, fileId); // Cache for 1 hour
-            
             await client.query('COMMIT');
         } catch (dbError) {
             await client.query('ROLLBACK');
-            console.error(`[Worker ${process.pid}] Database error:`, dbError);
             throw dbError;
         } finally {
             client.release();
@@ -568,9 +494,8 @@ app.post("/upload", uploadLimiter, multer({
 
         const downloadLink = `https://api.quicksend.vip/download/${fileId}`;
         const uploadTime = Date.now() - startTime;
-        
-        console.log(`[Worker ${process.pid}] Upload completed in ${uploadTime}ms: ${downloadLink}`);
-        
+
+        // Respond to user immediately
         res.json({
             success: true,
             fileId: fileId,
@@ -581,7 +506,34 @@ app.post("/upload", uploadLimiter, multer({
             uploadTime: `${uploadTime}ms`,
             worker: process.pid
         });
-        
+
+        // Start async S3 upload in background
+        setImmediate(async () => {
+            try {
+                const uploadParams = {
+                    Bucket: S3_BUCKET_NAME,
+                    Key: s3Key,
+                    Body: fs.createReadStream(req.file.path),
+                    ContentType: req.file.mimetype || 'application/octet-stream',
+                    Metadata: {
+                        originalName: req.file.originalname,
+                        fileId: fileId,
+                        uploadedBy: userId || 'anonymous'
+                    }
+                };
+                await s3.upload(uploadParams).promise();
+
+                // Update DB status to 'uploaded'
+                await pool.query('UPDATE files SET status = $1 WHERE id = $2', ['uploaded', fileId]);
+                // Delete the temp file
+                fs.unlink(req.file.path, () => {});
+                console.log(`[Worker ${process.pid}] Async S3 upload complete for fileId: ${fileId}`);
+            } catch (err) {
+                console.error(`[Worker ${process.pid}] Async S3 upload failed:`, err);
+                await pool.query('UPDATE files SET status = $1 WHERE id = $2', ['failed', fileId]);
+            }
+        });
+
     } catch (error) {
         console.error(`[Worker ${process.pid}] Upload error:`, error);
         res.status(500).json({ 
@@ -589,8 +541,7 @@ app.post("/upload", uploadLimiter, multer({
             worker: process.pid,
             uploadTime: `${Date.now() - startTime}ms`
         });
-    } finally {
-        // Clean up temporary file
+        // Clean up temp file on error
         if (req.file && req.file.path) {
             fs.unlink(req.file.path, (err) => {
                 if (err) console.error(`[Worker ${process.pid}] Error cleaning up temp file:`, err);
