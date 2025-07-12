@@ -5,15 +5,17 @@ const { v4: uuidv4 } = require("uuid");
 const path = require("path");
 const fs = require("fs");
 const { Pool } = require("pg");
-const cloudinary = require("cloudinary").v2;
+const AWS = require("aws-sdk");
 require("dotenv").config();
 
-// Configure Cloudinary
-cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME || "demo",
-    api_key: process.env.CLOUDINARY_API_KEY || "demo",
-    api_secret: process.env.CLOUDINARY_API_SECRET || "demo"
+// Configure AWS S3
+const s3 = new AWS.S3({
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+    region: process.env.AWS_REGION || 'us-east-1'
 });
+
+const S3_BUCKET_NAME = process.env.S3_BUCKET_NAME || 'quicksend-files';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -46,8 +48,8 @@ async function initializeDatabase() {
                 expires_at TIMESTAMPTZ NOT NULL,
                 download_count INTEGER NOT NULL DEFAULT 0,
                 is_active BOOLEAN NOT NULL DEFAULT TRUE,
-                cloudinary_url TEXT,
-                cloudinary_public_id TEXT
+                s3_key TEXT,
+                s3_bucket TEXT
             );
         `;
         await pool.query(createTableQuery);
@@ -93,26 +95,32 @@ app.post("/upload", multer({ dest: uploadsDir }).single("file"), async (req, res
         console.log(`File size: ${req.file.size}`);
         console.log(`Generated fileId: ${fileId}`);
 
-        // Upload to Cloudinary
-        let cloudinaryResult;
+        // Upload to AWS S3
+        const s3Key = `files/${fileId}/${req.file.originalname}`;
+        let s3Result;
         try {
-            cloudinaryResult = await cloudinary.uploader.upload(req.file.path, {
-                public_id: `quicksend/${fileId}`,
-                resource_type: "auto"
-            });
-            console.log(`File uploaded to Cloudinary: ${cloudinaryResult.secure_url}`);
-        } catch (cloudinaryError) {
-            console.error("Cloudinary upload error:", cloudinaryError);
-            // Fallback to demo mode if Cloudinary is not configured
-            cloudinaryResult = {
-                secure_url: `https://res.cloudinary.com/demo/image/upload/v1/quicksend/${fileId}`,
-                public_id: `quicksend/${fileId}`
+            const fileContent = fs.readFileSync(req.file.path);
+            const uploadParams = {
+                Bucket: S3_BUCKET_NAME,
+                Key: s3Key,
+                Body: fileContent,
+                ContentType: req.file.mimetype || 'application/octet-stream',
+                Metadata: {
+                    originalName: req.file.originalname,
+                    fileId: fileId
+                }
             };
+            
+            s3Result = await s3.upload(uploadParams).promise();
+            console.log(`File uploaded to S3: ${s3Result.Location}`);
+        } catch (s3Error) {
+            console.error("S3 upload error:", s3Error);
+            return res.status(500).json({ error: "Failed to upload file to S3" });
         }
 
         // Insert file metadata into database
         const insertQuery = `
-            INSERT INTO files (id, original_name, size, upload_date, expires_at, download_count, is_active, cloudinary_url, cloudinary_public_id)
+            INSERT INTO files (id, original_name, size, upload_date, expires_at, download_count, is_active, s3_key, s3_bucket)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         `;
         
@@ -124,8 +132,8 @@ app.post("/upload", multer({ dest: uploadsDir }).single("file"), async (req, res
             expiresAt,
             0,
             true,
-            cloudinaryResult.secure_url,
-            cloudinaryResult.public_id
+            s3Key,
+            S3_BUCKET_NAME
         ]);
 
         const downloadLink = `https://quicksend-backend.onrender.com/download/${fileId}`;
@@ -179,12 +187,25 @@ app.get("/download/:fileId", async (req, res) => {
         // Increment download count
         await pool.query('UPDATE files SET download_count = download_count + 1 WHERE id = $1', [fileId]);
         
-        // Redirect to Cloudinary URL
-        if (fileData.cloudinary_url) {
-            console.log(`Redirecting to Cloudinary URL: ${fileData.cloudinary_url}`);
-            res.redirect(fileData.cloudinary_url);
+        // Generate S3 presigned URL for download
+        if (fileData.s3_key && fileData.s3_bucket) {
+            try {
+                const params = {
+                    Bucket: fileData.s3_bucket,
+                    Key: fileData.s3_key,
+                    Expires: 3600, // URL expires in 1 hour
+                    ResponseContentDisposition: `attachment; filename="${fileData.original_name}"`
+                };
+                
+                const presignedUrl = await s3.getSignedUrlPromise('getObject', params);
+                console.log(`Generated presigned URL for file: ${fileId}`);
+                res.redirect(presignedUrl);
+            } catch (s3Error) {
+                console.error("Error generating presigned URL:", s3Error);
+                res.status(500).json({ error: "Failed to generate download link" });
+            }
         } else {
-            console.log(`No Cloudinary URL found for file: ${fileId}`);
+            console.log(`No S3 key found for file: ${fileId}`);
             res.status(404).json({ error: "File not found" });
         }
     } catch (error) {
