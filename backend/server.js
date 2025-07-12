@@ -727,11 +727,13 @@ app.get("/download/:fileId", async (req, res) => {
             const generatePresignedUrl = async (retries = 3) => {
                 for (let attempt = 1; attempt <= retries; attempt++) {
                     try {
+                        // Properly encode the filename for the Content-Disposition header
+                        const encodedFilename = encodeURIComponent(fileData.original_name).replace(/['()]/g, escape);
                         const params = {
                             Bucket: fileData.s3_bucket,
                             Key: fileData.s3_key,
                             Expires: 3600, // URL expires in 1 hour
-                            ResponseContentDisposition: `attachment; filename="${fileData.original_name}"`
+                            ResponseContentDisposition: `attachment; filename="${encodedFilename}"; filename*=UTF-8''${encodeURIComponent(fileData.original_name)}`
                         };
                         
                         const presignedUrl = await s3.getSignedUrlPromise('getObject', params);
