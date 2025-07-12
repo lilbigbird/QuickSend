@@ -5,7 +5,15 @@ const { v4: uuidv4 } = require("uuid");
 const path = require("path");
 const fs = require("fs");
 const { Pool } = require("pg");
+const cloudinary = require("cloudinary").v2;
 require("dotenv").config();
+
+// Configure Cloudinary
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME || "demo",
+    api_key: process.env.CLOUDINARY_API_KEY || "demo",
+    api_secret: process.env.CLOUDINARY_API_SECRET || "demo"
+});
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -37,7 +45,9 @@ async function initializeDatabase() {
                 upload_date TIMESTAMPTZ NOT NULL,
                 expires_at TIMESTAMPTZ NOT NULL,
                 download_count INTEGER NOT NULL DEFAULT 0,
-                is_active BOOLEAN NOT NULL DEFAULT TRUE
+                is_active BOOLEAN NOT NULL DEFAULT TRUE,
+                cloudinary_url TEXT,
+                cloudinary_public_id TEXT
             );
         `;
         await pool.query(createTableQuery);
@@ -83,10 +93,27 @@ app.post("/upload", multer({ dest: uploadsDir }).single("file"), async (req, res
         console.log(`File size: ${req.file.size}`);
         console.log(`Generated fileId: ${fileId}`);
 
+        // Upload to Cloudinary
+        let cloudinaryResult;
+        try {
+            cloudinaryResult = await cloudinary.uploader.upload(req.file.path, {
+                public_id: `quicksend/${fileId}`,
+                resource_type: "auto"
+            });
+            console.log(`File uploaded to Cloudinary: ${cloudinaryResult.secure_url}`);
+        } catch (cloudinaryError) {
+            console.error("Cloudinary upload error:", cloudinaryError);
+            // Fallback to demo mode if Cloudinary is not configured
+            cloudinaryResult = {
+                secure_url: `https://res.cloudinary.com/demo/image/upload/v1/quicksend/${fileId}`,
+                public_id: `quicksend/${fileId}`
+            };
+        }
+
         // Insert file metadata into database
         const insertQuery = `
-            INSERT INTO files (id, original_name, size, upload_date, expires_at, download_count, is_active)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            INSERT INTO files (id, original_name, size, upload_date, expires_at, download_count, is_active, cloudinary_url, cloudinary_public_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         `;
         
         await pool.query(insertQuery, [
@@ -96,7 +123,9 @@ app.post("/upload", multer({ dest: uploadsDir }).single("file"), async (req, res
             uploadDate,
             expiresAt,
             0,
-            true
+            true,
+            cloudinaryResult.secure_url,
+            cloudinaryResult.public_id
         ]);
 
         const downloadLink = `https://quicksend-backend.onrender.com/download/${fileId}`;
@@ -147,20 +176,17 @@ app.get("/download/:fileId", async (req, res) => {
             return res.status(410).json({ error: "File has expired" });
         }
 
-        const filePath = path.join(uploadsDir, fileId);
-        console.log(`Looking for file at: ${filePath}`);
-        console.log(`File exists: ${fs.existsSync(filePath)}`);
-        
-        if (!fs.existsSync(filePath)) {
-            console.log(`File not found on disk: ${filePath}`);
-            return res.status(404).json({ error: "File not found" });
-        }
-
         // Increment download count
         await pool.query('UPDATE files SET download_count = download_count + 1 WHERE id = $1', [fileId]);
         
-        console.log(`Serving file: ${filePath}`);
-        res.download(filePath, fileData.original_name);
+        // Redirect to Cloudinary URL
+        if (fileData.cloudinary_url) {
+            console.log(`Redirecting to Cloudinary URL: ${fileData.cloudinary_url}`);
+            res.redirect(fileData.cloudinary_url);
+        } else {
+            console.log(`No Cloudinary URL found for file: ${fileId}`);
+            res.status(404).json({ error: "File not found" });
+        }
     } catch (error) {
         console.error("Download error:", error);
         res.status(500).json({ error: "Download failed" });
