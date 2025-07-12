@@ -272,6 +272,15 @@ async function initializeDatabase() {
     }
 }
 
+// Simple health check for Render
+app.get("/", (req, res) => {
+    res.json({ 
+        status: "QuickSend API is running", 
+        timestamp: new Date().toISOString(),
+        worker: process.pid
+    });
+});
+
 // Enhanced health check with Redis and database status
 app.get("/health", async (req, res) => {
     try {
@@ -281,8 +290,14 @@ app.get("/health", async (req, res) => {
         const dbResult = await pool.query('SELECT COUNT(*) as count FROM files WHERE is_active = true');
         const fileCount = parseInt(dbResult.rows[0].count);
         
-        // Check Redis connection
-        const redisPing = await redisClient.ping();
+        // Check Redis connection (optional)
+        let redisStatus = 'disconnected';
+        try {
+            const redisPing = await redisClient.ping();
+            redisStatus = redisPing === 'PONG' ? 'connected' : 'disconnected';
+        } catch (redisError) {
+            console.log('Redis not available:', redisError.message);
+        }
         
         // Get memory usage
         const memUsage = process.memoryUsage();
@@ -303,7 +318,7 @@ app.get("/health", async (req, res) => {
             memory: memUsageMB,
             uptime: process.uptime(),
             responseTime: `${responseTime}ms`,
-            redis: redisPing === 'PONG' ? 'connected' : 'disconnected',
+            redis: redisStatus,
             database: 'connected'
         });
     } catch (error) {
@@ -803,7 +818,7 @@ app.post('/s3/download-url', auth.authenticateToken, async (req, res) => {
 });
 
 // Start server
-app.listen(PORT, "0.0.0.0", async () => {
+const server = app.listen(PORT, () => {
     console.log(`QuickSend API server running on port ${PORT}`);
     console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
     console.log(`Upload endpoint: /upload`);
@@ -811,9 +826,33 @@ app.listen(PORT, "0.0.0.0", async () => {
     console.log(`Health check: /health`);
     
     // Initialize database
-    await initializeDatabase();
-    
-    console.log(`Database connected and initialized`);
+    initializeDatabase().then(() => {
+        console.log(`Database connected and initialized`);
+    }).catch(err => {
+        console.error('Database initialization failed:', err);
+    });
+});
+
+// Handle server errors
+server.on('error', (error) => {
+    if (error.syscall !== 'listen') {
+        throw error;
+    }
+
+    const bind = typeof PORT === 'string' ? 'Pipe ' + PORT : 'Port ' + PORT;
+
+    switch (error.code) {
+        case 'EACCES':
+            console.error(bind + ' requires elevated privileges');
+            process.exit(1);
+            break;
+        case 'EADDRINUSE':
+            console.error(bind + ' is already in use');
+            process.exit(1);
+            break;
+        default:
+            throw error;
+    }
 });
 
 module.exports = app;
