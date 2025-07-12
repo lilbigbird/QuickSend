@@ -15,8 +15,8 @@ const helmet = require("helmet");
 const auth = require("./auth");
 require("dotenv").config();
 
-// Clustering for multi-core utilization
-if (cluster.isMaster) {
+// Clustering for multi-core utilization (only in production)
+if (process.env.NODE_ENV === 'production' && cluster.isMaster) {
     const numCPUs = os.cpus().length;
     console.log(`Master ${process.pid} is running`);
     console.log(`Starting ${numCPUs} workers...`);
@@ -41,8 +41,12 @@ if (cluster.isMaster) {
     return;
 }
 
-// Worker process code
-console.log(`Worker ${process.pid} started`);
+// Worker process code (or single process in development)
+if (process.env.NODE_ENV === 'production') {
+    console.log(`Worker ${process.pid} started`);
+} else {
+    console.log(`Development server started`);
+}
 
 // Configure AWS S3 with optimized settings for high concurrency
 let s3;
@@ -277,7 +281,18 @@ app.get("/", (req, res) => {
     res.json({ 
         status: "QuickSend API is running", 
         timestamp: new Date().toISOString(),
-        worker: process.pid
+        worker: process.pid,
+        port: PORT,
+        environment: process.env.NODE_ENV || "development"
+    });
+});
+
+// Test endpoint for Render port detection
+app.get("/test", (req, res) => {
+    res.json({ 
+        message: "Server is responding", 
+        timestamp: new Date().toISOString(),
+        pid: process.pid
     });
 });
 
@@ -817,20 +832,23 @@ app.post('/s3/download-url', auth.authenticateToken, async (req, res) => {
   }
 });
 
-// Start server
-const server = app.listen(PORT, () => {
-    console.log(`QuickSend API server running on port ${PORT}`);
+// Start server immediately
+const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 QuickSend API server running on port ${PORT}`);
     console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
     console.log(`Upload endpoint: /upload`);
     console.log(`Download endpoint: /download/:fileId`);
     console.log(`Health check: /health`);
+    console.log(`Root endpoint: /`);
     
-    // Initialize database
-    initializeDatabase().then(() => {
-        console.log(`Database connected and initialized`);
-    }).catch(err => {
-        console.error('Database initialization failed:', err);
-    });
+    // Initialize database in background
+    setTimeout(() => {
+        initializeDatabase().then(() => {
+            console.log(`✅ Database connected and initialized`);
+        }).catch(err => {
+            console.error('❌ Database initialization failed:', err);
+        });
+    }, 1000);
 });
 
 // Handle server errors
