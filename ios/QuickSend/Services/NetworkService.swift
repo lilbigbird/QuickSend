@@ -8,7 +8,7 @@ class NetworkService {
     // private let baseURL = "http://192.168.1.30:3000" // Your Mac's IP address for real device
     
     // For production (App Store)
-    private let baseURL = "https://quicksend.up.railway.app" // Your live Railway backend
+    private let baseURL = "https://quicksend-backend.onrender.com" // Your live Render backend
     
     private init() {}
     

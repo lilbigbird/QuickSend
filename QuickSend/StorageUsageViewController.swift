@@ -491,7 +491,7 @@ extension StorageUsageViewController: UITableViewDelegate {
     }
     
     private func copyFileLink(fileId: String) {
-        let link = "https://quicksend.up.railway.app/download/\(fileId)"
+        let link = "https://quicksend-backend.onrender.com/download/\(fileId)"
         UIPasteboard.general.string = link
         
         let alert = UIAlertController(title: "Link Copied", message: "File link has been copied to clipboard", preferredStyle: .alert)
