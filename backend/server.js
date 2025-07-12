@@ -88,10 +88,21 @@ app.get("/health", async (req, res) => {
         const result = await pool.query('SELECT COUNT(*) as count FROM files WHERE is_active = true');
         const fileCount = parseInt(result.rows[0].count);
         
+        // Get memory usage
+        const memUsage = process.memoryUsage();
+        const memUsageMB = {
+            rss: Math.round(memUsage.rss / 1024 / 1024),
+            heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024),
+            heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024),
+            external: Math.round(memUsage.external / 1024 / 1024)
+        };
+        
         res.json({ 
             status: "healthy", 
             timestamp: new Date().toISOString(),
-            files: fileCount
+            files: fileCount,
+            memory: memUsageMB,
+            uptime: process.uptime()
         });
     } catch (error) {
         console.error('Health check error:', error);
@@ -102,8 +113,14 @@ app.get("/health", async (req, res) => {
     }
 });
 
-// File upload endpoint
-app.post("/upload", multer({ dest: uploadsDir }).single("file"), async (req, res) => {
+// File upload endpoint with streaming for large files
+app.post("/upload", multer({ 
+    dest: uploadsDir,
+    limits: {
+        fileSize: 5 * 1024 * 1024 * 1024, // 5GB max
+        fieldSize: 10 * 1024 * 1024 // 10MB for form fields
+    }
+}).single("file"), async (req, res) => {
     try {
         if (!req.file) {
             return res.status(400).json({ error: "No file uploaded" });
@@ -118,15 +135,14 @@ app.post("/upload", multer({ dest: uploadsDir }).single("file"), async (req, res
         console.log(`File size: ${req.file.size}`);
         console.log(`Generated fileId: ${fileId}`);
 
-        // Upload to AWS S3
+        // Upload to AWS S3 with streaming for large files
         const s3Key = `files/${fileId}/${req.file.originalname}`;
         let s3Result;
         try {
-            const fileContent = fs.readFileSync(req.file.path);
             const uploadParams = {
                 Bucket: S3_BUCKET_NAME,
                 Key: s3Key,
-                Body: fileContent,
+                Body: fs.createReadStream(req.file.path), // Stream instead of loading into memory
                 ContentType: req.file.mimetype || 'application/octet-stream',
                 Metadata: {
                     originalName: req.file.originalname,
