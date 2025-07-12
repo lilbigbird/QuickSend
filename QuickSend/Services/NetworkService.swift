@@ -9,16 +9,24 @@ class NetworkService {
     // private let baseURL = "http://192.168.1.30:3000" // Your Mac's IP address for real device
     
     // For production (App Store)
-    private let baseURL = "https://quicksend-backend.onrender.com" // Your live Render backend
+    private let baseURL = "https://quicksend-backend.onrender.com" // Your Render backend
     
     private init() {}
     
     // MARK: - File Upload (S3)
     func uploadFile(fileURL: URL, progressHandler: @escaping (Float) -> Void, completion: @escaping (Result<UploadResponse, NetworkError>) -> Void) {
-        // Step 1: Get file info and request upload URL
-        let fileName = fileURL.lastPathComponent
+        guard let url = URL(string: "\(baseURL)/upload") else {
+            completion(.failure(.invalidURL))
+            return
+        }
         
-        // Get file size
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        
+        let boundary = UUID().uuidString
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        
+        // Get file size for progress tracking
         let fileSize: Int64
         if fileURL.startAccessingSecurityScopedResource() {
             defer { fileURL.stopAccessingSecurityScopedResource() }
@@ -31,6 +39,7 @@ class NetworkService {
                 fileSize = 0
             }
         } else {
+            // Fallback for non-security-scoped URLs
             if let resourceValues = try? fileURL.resourceValues(forKeys: [.fileSizeKey]) {
                 fileSize = Int64(resourceValues.fileSize ?? 0)
             } else if let attributes = try? FileManager.default.attributesOfItem(atPath: fileURL.path) {
@@ -40,31 +49,60 @@ class NetworkService {
             }
         }
         
-        // Request upload URL from backend
-        requestUploadURL(fileName: fileName, fileSize: fileSize) { [weak self] result in
-            switch result {
-            case .success(let uploadURLResponse):
-                // Step 2: Upload file directly to S3
-                self?.uploadToS3(fileURL: fileURL, uploadURL: uploadURLResponse.uploadUrl, fileId: uploadURLResponse.fileId, progressHandler: progressHandler) { uploadResult in
-                    switch uploadResult {
-                    case .success:
-                        // Step 3: Confirm upload completion
-                        self?.confirmUpload(fileId: uploadURLResponse.fileId) { confirmResult in
-                            switch confirmResult {
-                            case .success(let response):
-                                completion(.success(response))
-                            case .failure(let error):
-                                completion(.failure(error))
-                            }
-                        }
-                    case .failure(let error):
-                        completion(.failure(error))
-                    }
+        // Create multipart body
+        var body = Data()
+        
+        // Add file header
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(fileURL.lastPathComponent)\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: application/octet-stream\r\n\r\n".data(using: .utf8)!)
+        
+        // Add file data
+        do {
+            let fileData = try Data(contentsOf: fileURL)
+            body.append(fileData)
+        } catch {
+            completion(.failure(.networkError(error)))
+            return
+        }
+        
+        // Add closing boundary
+        body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
+        
+        request.httpBody = body
+        
+        let task = URLSession.shared.dataTask(with: request) { data, response, error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    completion(.failure(.networkError(error)))
+                    return
                 }
-            case .failure(let error):
-                completion(.failure(error))
+                
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    completion(.failure(.invalidResponse))
+                    return
+                }
+                
+                guard (200...299).contains(httpResponse.statusCode) else {
+                    completion(.failure(.serverError(httpResponse.statusCode)))
+                    return
+                }
+                
+                guard let data = data else {
+                    completion(.failure(.noData))
+                    return
+                }
+                
+                do {
+                    let uploadResponse = try JSONDecoder().decode(UploadResponse.self, from: data)
+                    completion(.success(uploadResponse))
+                } catch {
+                    completion(.failure(.decodingError(error)))
+                }
             }
         }
+        
+        task.resume()
     }
     
     private func requestUploadURL(fileName: String, fileSize: Int64, completion: @escaping (Result<UploadURLResponse, NetworkError>) -> Void) {
