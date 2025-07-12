@@ -44,7 +44,7 @@ if (cluster.isMaster) {
 // Worker process code
 console.log(`Worker ${process.pid} started`);
 
-// Configure AWS S3 with connection pooling
+// Configure AWS S3 with optimized settings for high concurrency
 const s3 = new AWS.S3({
     accessKeyId: process.env.AWS_ACCESS_KEY_ID,
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
@@ -53,8 +53,20 @@ const s3 = new AWS.S3({
     httpOptions: {
         timeout: 300000, // 5 minutes
         connectTimeout: 60000, // 1 minute
-        maxRetries: 3
+        maxRetries: 3,
+        agent: false // Disable keep-alive for better concurrency
+    },
+    maxRetries: 3,
+    retryDelayOptions: {
+        base: 300 // Base delay for retries
     }
+});
+
+// S3 upload manager for better concurrency
+const s3UploadManager = new AWS.S3.ManagedUpload({
+    partSize: 10 * 1024 * 1024, // 10MB parts for multipart uploads
+    queueSize: 4, // Number of parts to upload concurrently
+    leavePartsOnError: false
 });
 
 const S3_BUCKET_NAME = process.env.S3_BUCKET_NAME || 'quicksend-files';
@@ -495,7 +507,13 @@ app.post("/upload", uploadLimiter, multer({
                         }
                     };
                     
-                    s3Result = await s3.upload(uploadParams).promise();
+                    // Use managed upload for better performance with large files
+                    if (req.file.size > 100 * 1024 * 1024) { // 100MB threshold
+                        s3Result = await s3UploadManager.upload(uploadParams).promise();
+                    } else {
+                        s3Result = await s3.upload(uploadParams).promise();
+                    }
+                    
                     console.log(`[Worker ${process.pid}] File uploaded to S3 on attempt ${attempt}: ${s3Result.Location}`);
                     return s3Result;
                 } catch (s3Error) {
