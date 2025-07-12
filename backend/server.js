@@ -814,6 +814,9 @@ app.get("/storage", async (req, res) => {
 
 // S3 Presigned Upload URL (works for both authenticated and unauthenticated users)
 app.post('/s3/upload-url', async (req, res) => {
+  console.log(`[Worker ${process.pid}] S3 upload URL request received`);
+  console.log(`[Worker ${process.pid}] Request body:`, req.body);
+  
   const { fileName, fileType } = req.body;
   if (!fileName || !fileType) {
     return res.status(400).json({ error: 'fileName and fileType are required' });
@@ -821,6 +824,7 @@ app.post('/s3/upload-url', async (req, res) => {
   
   // Get user ID if authenticated, otherwise use 'anonymous'
   const userId = req.user?.id || 'anonymous';
+  console.log(`[Worker ${process.pid}] User ID: ${userId}`);
   
   const fileId = uuidv4();
   const s3Key = `files/${fileId}/${fileName}`;
@@ -835,6 +839,7 @@ app.post('/s3/upload-url', async (req, res) => {
   };
   try {
     const url = await s3.getSignedUrlPromise('putObject', params);
+    console.log(`[Worker ${process.pid}] Generated S3 upload URL for fileId: ${fileId}`);
     res.json({ url, fileId, s3Key });
   } catch (err) {
     console.error('S3 upload URL generation error:', err);
