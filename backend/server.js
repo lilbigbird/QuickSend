@@ -686,6 +686,30 @@ app.get("/download/:fileId", async (req, res) => {
             
             fileData = result.rows[0];
             
+            // If file size is 0, try to get it from S3 metadata
+            if (fileData.size === 0 && fileData.s3_key && fileData.s3_bucket) {
+                try {
+                    console.log(`[Worker ${process.pid}] Attempting to get file size from S3 for: ${fileId}`);
+                    const s3Params = {
+                        Bucket: fileData.s3_bucket,
+                        Key: fileData.s3_key
+                    };
+                    const s3Object = await s3.headObject(s3Params).promise();
+                    const actualSize = s3Object.ContentLength || 0;
+                    
+                    if (actualSize > 0) {
+                        // Update database with actual file size
+                        await pool.query('UPDATE files SET size = $1, status = $2 WHERE id = $3', [actualSize, 'uploaded', fileId]);
+                        fileData.size = actualSize;
+                        fileData.status = 'uploaded';
+                        console.log(`[Worker ${process.pid}] Updated file size from S3: ${fileId} -> ${actualSize} bytes`);
+                    }
+                } catch (s3Error) {
+                    console.error(`[Worker ${process.pid}] Error getting S3 metadata:`, s3Error);
+                    // Continue with existing data
+                }
+            }
+            
             // Cache the file metadata for 1 hour (only if Redis is available)
             if (redisClient) {
                 try {
