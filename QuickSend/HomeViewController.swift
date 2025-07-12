@@ -424,7 +424,8 @@ class HomeViewController: UIViewController {
         progressLabel.isHidden = false
         progressView.progress = 0.0
         
-        NetworkService.shared.uploadFile(fileURL: fileURL, progressHandler: { progress in
+        // Use optimized S3 upload for maximum performance
+        NetworkService.shared.uploadFileOptimized(fileURL: fileURL, progressHandler: { progress in
             DispatchQueue.main.async {
                 self.progressView.progress = progress
                 let percentage = Int(progress * 100)

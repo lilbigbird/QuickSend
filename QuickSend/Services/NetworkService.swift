@@ -50,7 +50,45 @@ class NetworkService {
     private var activeUploads: [String: URLSessionUploadTask] = [:]
     private let uploadQueue = DispatchQueue(label: "com.quicksend.upload", qos: .userInitiated, attributes: .concurrent)
     
-    // MARK: - File Upload (S3) with Concurrency Management
+    // MARK: - Optimized S3 Upload (Direct to S3)
+    func uploadFileOptimized(fileURL: URL, progressHandler: @escaping (Float) -> Void, completion: @escaping (Result<UploadResponse, NetworkError>) -> Void) {
+        let fileName = fileURL.lastPathComponent
+        let fileType = "application/octet-stream" // You can detect this more accurately if needed
+        
+        // Step 1: Get presigned upload URL from backend
+        getS3UploadURL(fileName: fileName, fileType: fileType) { [weak self] result in
+            switch result {
+            case .success(let s3Response):
+                // Step 2: Upload directly to S3 using presigned URL
+                guard let presignedURL = URL(string: s3Response.url) else {
+                    completion(.failure(.invalidURL))
+                    return
+                }
+                
+                self?.uploadFileToS3(fileURL: fileURL, presignedURL: presignedURL, progressHandler: progressHandler) { uploadResult in
+                    switch uploadResult {
+                    case .success:
+                        // Step 3: Create a mock UploadResponse for compatibility
+                        let uploadResponse = UploadResponse(
+                            success: true,
+                            fileId: s3Response.fileId,
+                            downloadLink: "https://api.quicksend.vip/download/\(s3Response.fileId)",
+                            fileName: fileName,
+                            fileSize: 0, // We'll need to get this from the file
+                            expiresAt: ISO8601DateFormatter().string(from: Date().addingTimeInterval(7 * 24 * 60 * 60))
+                        )
+                        completion(.success(uploadResponse))
+                    case .failure(let error):
+                        completion(.failure(error))
+                    }
+                }
+            case .failure(let error):
+                completion(.failure(error))
+            }
+        }
+    }
+    
+    // MARK: - File Upload (S3) with Concurrency Management (Legacy method)
     func uploadFile(fileURL: URL, progressHandler: @escaping (Float) -> Void, completion: @escaping (Result<UploadResponse, NetworkError>) -> Void) {
         let uploadId = UUID().uuidString
         
@@ -198,6 +236,208 @@ class NetworkService {
                 self.activeUploads.removeValue(forKey: uploadId)
             }
         }
+    }
+    
+    // MARK: - S3 Presigned URL Methods
+    func getS3UploadURL(fileName: String, fileType: String, completion: @escaping (Result<S3UploadURLResponse, NetworkError>) -> Void) {
+        guard let url = URL(string: "\(baseURL)/s3/upload-url") else {
+            completion(.failure(.invalidURL))
+            return
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        // Add authentication token if available
+        if let token = UserManager.shared.authToken {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        let body: [String: Any] = [
+            "fileName": fileName,
+            "fileType": fileType
+        ]
+        
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        } catch {
+            completion(.failure(.encodingError))
+            return
+        }
+        
+        let task = optimizedSession.dataTask(with: request) { data, response, error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    completion(.failure(.networkError(error)))
+                    return
+                }
+                
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    completion(.failure(.invalidResponse))
+                    return
+                }
+                
+                guard (200...299).contains(httpResponse.statusCode) else {
+                    completion(.failure(.serverError(httpResponse.statusCode)))
+                    return
+                }
+                
+                guard let data = data else {
+                    completion(.failure(.noData))
+                    return
+                }
+                
+                do {
+                    let response = try JSONDecoder().decode(S3UploadURLResponse.self, from: data)
+                    completion(.success(response))
+                } catch {
+                    completion(.failure(.decodingError(error)))
+                }
+            }
+        }
+        
+        task.resume()
+    }
+    
+    func getS3DownloadURL(s3Key: String, completion: @escaping (Result<S3DownloadURLResponse, NetworkError>) -> Void) {
+        guard let url = URL(string: "\(baseURL)/s3/download-url") else {
+            completion(.failure(.invalidURL))
+            return
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        // Add authentication token if available
+        if let token = UserManager.shared.authToken {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        let body: [String: Any] = [
+            "s3Key": s3Key
+        ]
+        
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        } catch {
+            completion(.failure(.encodingError))
+            return
+        }
+        
+        let task = optimizedSession.dataTask(with: request) { data, response, error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    completion(.failure(.networkError(error)))
+                    return
+                }
+                
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    completion(.failure(.invalidResponse))
+                    return
+                }
+                
+                guard (200...299).contains(httpResponse.statusCode) else {
+                    completion(.failure(.serverError(httpResponse.statusCode)))
+                    return
+                }
+                
+                guard let data = data else {
+                    completion(.failure(.noData))
+                    return
+                }
+                
+                do {
+                    let response = try JSONDecoder().decode(S3DownloadURLResponse.self, from: data)
+                    completion(.success(response))
+                } catch {
+                    completion(.failure(.decodingError(error)))
+                }
+            }
+        }
+        
+        task.resume()
+    }
+    
+    // MARK: - Direct S3 Upload/Download
+    func uploadFileToS3(fileURL: URL, presignedURL: URL, progressHandler: @escaping (Float) -> Void, completion: @escaping (Result<Void, NetworkError>) -> Void) {
+        var request = URLRequest(url: presignedURL)
+        request.httpMethod = "PUT"
+        request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        
+        let task = optimizedSession.uploadTask(with: request, fromFile: fileURL) { data, response, error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    completion(.failure(.networkError(error)))
+                    return
+                }
+                
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    completion(.failure(.invalidResponse))
+                    return
+                }
+                
+                guard (200...299).contains(httpResponse.statusCode) else {
+                    completion(.failure(.serverError(httpResponse.statusCode)))
+                    return
+                }
+                
+                completion(.success(()))
+            }
+        }
+        
+        // Monitor upload progress
+        let observation = task.progress.observe(\.fractionCompleted) { progress, _ in
+            DispatchQueue.main.async {
+                progressHandler(Float(progress.fractionCompleted))
+            }
+        }
+        
+        // Store observation to prevent deallocation
+        objc_setAssociatedObject(task, "progressObservation", observation, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        
+        task.resume()
+    }
+    
+    func downloadFileFromS3(presignedURL: URL, progressHandler: @escaping (Float) -> Void, completion: @escaping (Result<Data, NetworkError>) -> Void) {
+        let task = optimizedSession.dataTask(with: presignedURL) { data, response, error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    completion(.failure(.networkError(error)))
+                    return
+                }
+                
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    completion(.failure(.invalidResponse))
+                    return
+                }
+                
+                guard (200...299).contains(httpResponse.statusCode) else {
+                    completion(.failure(.serverError(httpResponse.statusCode)))
+                    return
+                }
+                
+                guard let data = data else {
+                    completion(.failure(.noData))
+                    return
+                }
+                
+                completion(.success(data))
+            }
+        }
+        
+        // Monitor download progress
+        let observation = task.progress.observe(\.fractionCompleted) { progress, _ in
+            DispatchQueue.main.async {
+                progressHandler(Float(progress.fractionCompleted))
+            }
+        }
+        
+        // Store observation to prevent deallocation
+        objc_setAssociatedObject(task, "progressObservation", observation, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        
+        task.resume()
     }
     
     private func requestUploadURL(fileName: String, fileSize: Int64, completion: @escaping (Result<UploadURLResponse, NetworkError>) -> Void) {
@@ -1180,6 +1420,16 @@ struct CancelResponse: Codable {
 struct UploadURLResponse: Codable {
     let uploadUrl: String
     let fileId: String
+}
+
+struct S3UploadURLResponse: Codable {
+    let url: String
+    let fileId: String
+    let s3Key: String
+}
+
+struct S3DownloadURLResponse: Codable {
+    let url: String
 }
 
 // MARK: - Error Types
