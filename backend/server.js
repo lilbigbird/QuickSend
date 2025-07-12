@@ -6,20 +6,6 @@ const path = require('path');
 const fs = require('fs');
 const userDB = require('./userDatabase');
 require('dotenv').config();
-<<<<<<< HEAD
-const AWS = require('aws-sdk');
-const bcrypt = require('bcrypt');
-
-// AWS S3 Configuration
-const s3 = new AWS.S3({
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID || 'YOUR_ACCESS_KEY_ID',
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || 'YOUR_SECRET_ACCESS_KEY',
-    region: process.env.AWS_REGION || 'us-east-1'
-});
-
-const BUCKET_NAME = process.env.S3_BUCKET_NAME || 'quicksend-files-sour';
-=======
->>>>>>> 9b57587dd035c392806c41dbdf72d7e547627a5b
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -150,16 +136,6 @@ const upload = multer({
     }
 });
 
-<<<<<<< HEAD
-// Increase timeout for large file uploads
-app.use('/upload', (req, res, next) => {
-    req.setTimeout(30 * 60 * 1000); // 30 minutes timeout
-    res.setTimeout(30 * 60 * 1000); // 30 minutes timeout
-    next();
-});
-
-=======
->>>>>>> 9b57587dd035c392806c41dbdf72d7e547627a5b
 // Authentication Routes
 app.post('/auth/signin', (req, res) => {
     try {
@@ -316,35 +292,6 @@ app.get('/admin/users', (req, res) => {
     }
 });
 
-<<<<<<< HEAD
-// Generate pre-signed upload URL
-app.post('/upload-url', (req, res) => {
-    try {
-        const { fileName, fileSize, subscriptionTier = 'free' } = req.body;
-
-        if (!fileName || !fileSize) {
-            return res.status(400).json({ error: 'File name and size are required' });
-        }
-
-        const tierConfig = SUBSCRIPTION_TIERS[subscriptionTier] || SUBSCRIPTION_TIERS.free;
-
-        // Check file size against tier limits
-        if (fileSize > tierConfig.maxFileSize) {
-=======
-// Routes
-app.post('/upload', upload.single('file'), (req, res) => {
-    try {
-        if (!req.file) {
-            return res.status(400).json({ error: 'No file uploaded' });
-        }
-
-        // Get subscription tier (default to free)
-        const subscriptionTier = req.headers['x-subscription-tier'] || 'free';
-        const tierConfig = SUBSCRIPTION_TIERS[subscriptionTier] || SUBSCRIPTION_TIERS.free;
-
-        // Check file size limit
-        if (req.file.size > tierConfig.maxFileSize) {
->>>>>>> 9b57587dd035c392806c41dbdf72d7e547627a5b
             return res.status(413).json({ 
                 error: `File too large. Maximum size for ${subscriptionTier} tier is ${Math.round(tierConfig.maxFileSize / (1024 * 1024))}MB`,
                 upgradeRequired: true,
@@ -354,29 +301,10 @@ app.post('/upload', upload.single('file'), (req, res) => {
         }
 
         const fileId = uuidv4();
-<<<<<<< HEAD
-        const s3Key = `${fileId}-${fileName}`;
-
-        // Create file metadata (will be saved after successful upload)
-=======
-        const fileName = req.file.originalname;
-        const fileSize = req.file.size;
-        const filePath = req.file.path;
-        const mimeType = req.file.mimetype;
-        
-        // Create file metadata
->>>>>>> 9b57587dd035c392806c41dbdf72d7e547627a5b
         const fileData = {
             id: fileId,
             originalName: fileName,
             size: fileSize,
-<<<<<<< HEAD
-            s3Key: s3Key,
-            mimeType: 'application/octet-stream',
-=======
-            path: filePath,
-            mimeType: mimeType,
->>>>>>> 9b57587dd035c392806c41dbdf72d7e547627a5b
             uploadDate: new Date(),
             expiresAt: new Date(Date.now() + tierConfig.maxExpiryDays * 24 * 60 * 60 * 1000),
             downloadCount: 0,
@@ -384,61 +312,6 @@ app.post('/upload', upload.single('file'), (req, res) => {
             subscriptionTier: subscriptionTier
         };
 
-<<<<<<< HEAD
-        // Generate pre-signed upload URL
-        const uploadParams = {
-            Bucket: BUCKET_NAME,
-            Key: s3Key,
-            ContentType: 'application/octet-stream',
-            Expires: 3600 // URL expires in 1 hour
-        };
-
-        s3.getSignedUrl('putObject', uploadParams, (err, uploadUrl) => {
-            if (err) {
-                console.error('Error generating upload URL:', err);
-                return res.status(500).json({ error: 'Failed to generate upload URL' });
-            }
-
-            // Store file metadata in database
-            fileDatabase.set(fileId, fileData);
-            saveDatabase(fileDatabase);
-
-            res.json({
-                success: true,
-                fileId: fileId,
-                uploadUrl: uploadUrl,
-                fileName: fileName,
-                fileSize: fileSize,
-                expiresAt: fileData.expiresAt,
-                subscriptionTier: subscriptionTier,
-                features: tierConfig.features
-            });
-        });
-
-    } catch (error) {
-        console.error('Upload URL generation error:', error);
-        res.status(500).json({ error: 'Internal server error' });
-    }
-});
-
-// Confirm upload completion
-app.post('/upload-complete', (req, res) => {
-    try {
-        const { fileId } = req.body;
-
-        if (!fileId) {
-            return res.status(400).json({ error: 'File ID is required' });
-        }
-
-        const fileData = fileDatabase.get(fileId);
-        if (!fileData) {
-            return res.status(404).json({ error: 'File not found' });
-        }
-=======
-        // Store in database
-        fileDatabase.set(fileId, fileData);
-        saveDatabase(fileDatabase);
->>>>>>> 9b57587dd035c392806c41dbdf72d7e547627a5b
 
         // Generate download link
         const downloadLink = `${req.protocol}://${req.get('host')}/file/${fileId}`;
@@ -447,26 +320,6 @@ app.post('/upload-complete', (req, res) => {
             success: true,
             fileId: fileId,
             downloadLink: downloadLink,
-<<<<<<< HEAD
-            fileName: fileData.originalName,
-            fileSize: fileData.size,
-            expiresAt: fileData.expiresAt,
-            subscriptionTier: fileData.subscriptionTier
-        });
-
-    } catch (error) {
-        console.error('Upload completion error:', error);
-=======
-            fileName: fileName,
-            fileSize: fileSize,
-            expiresAt: fileData.expiresAt,
-            subscriptionTier: subscriptionTier,
-            features: tierConfig.features
-        });
-
-    } catch (error) {
-        console.error('Upload error:', error);
->>>>>>> 9b57587dd035c392806c41dbdf72d7e547627a5b
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -494,40 +347,6 @@ app.get('/file/:fileId', (req, res) => {
         fileData.downloadCount++;
         saveDatabase(fileDatabase);
 
-<<<<<<< HEAD
-        // Generate pre-signed download URL for S3
-        const downloadParams = {
-            Bucket: BUCKET_NAME,
-            Key: fileData.s3Key,
-            Expires: 3600 // URL expires in 1 hour
-        };
-
-        s3.getSignedUrl('getObject', downloadParams, (err, downloadUrl) => {
-            if (err) {
-                console.error('Error generating download URL:', err);
-                return res.status(500).json({ error: 'Error generating download link' });
-            }
-
-            res.json({
-                success: true,
-                downloadUrl: downloadUrl,
-                fileName: fileData.originalName,
-                fileSize: fileData.size,
-                expiresAt: fileData.expiresAt
-            });
-=======
-        // Check if file exists on disk
-        if (!fs.existsSync(fileData.path)) {
-            return res.status(404).json({ error: 'File not found on server' });
-        }
-
-        // Send file
-        res.download(fileData.path, fileData.originalName, (err) => {
-            if (err) {
-                console.error('Download error:', err);
-                res.status(500).json({ error: 'Error downloading file' });
-            }
->>>>>>> 9b57587dd035c392806c41dbdf72d7e547627a5b
         });
 
     } catch (error) {
