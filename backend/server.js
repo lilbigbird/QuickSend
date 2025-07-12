@@ -52,7 +52,7 @@ const s3UploadConfig = {
     leavePartsOnError: false
 };
 
-const S3_BUCKET_NAME = process.env.S3_BUCKET_NAME || 'quicksend-files';
+const S3_BUCKET_NAME = process.env.S3_BUCKET_NAME || 'quicksend-files-sour';
 
 // Redis client for caching and session management (optional)
 let redisClient = null;
