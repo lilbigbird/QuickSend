@@ -4,6 +4,7 @@ const multer = require("multer");
 const { v4: uuidv4 } = require("uuid");
 const path = require("path");
 const fs = require("fs");
+const { Pool } = require("pg");
 require("dotenv").config();
 
 const app = express();
@@ -13,53 +14,95 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
+// Database connection
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+});
+
 // File storage
 const uploadsDir = path.join(__dirname, "uploads");
 if (!fs.existsSync(uploadsDir)) {
     fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-// In-memory file database (for demo purposes)
-const fileDatabase = new Map();
+// Initialize database table
+async function initializeDatabase() {
+    try {
+        const createTableQuery = `
+            CREATE TABLE IF NOT EXISTS files (
+                id UUID PRIMARY KEY,
+                original_name TEXT NOT NULL,
+                size BIGINT NOT NULL,
+                upload_date TIMESTAMPTZ NOT NULL,
+                expires_at TIMESTAMPTZ NOT NULL,
+                download_count INTEGER NOT NULL DEFAULT 0,
+                is_active BOOLEAN NOT NULL DEFAULT TRUE
+            );
+        `;
+        await pool.query(createTableQuery);
+        console.log('Database table initialized successfully');
+    } catch (error) {
+        console.error('Error initializing database:', error);
+    }
+}
 
 // Health check endpoint
-app.get("/health", (req, res) => {
-    res.json({ 
-        status: "healthy", 
-        timestamp: new Date().toISOString(),
-        files: fileDatabase.size
-    });
+app.get("/health", async (req, res) => {
+    try {
+        const result = await pool.query('SELECT COUNT(*) as count FROM files WHERE is_active = true');
+        const fileCount = parseInt(result.rows[0].count);
+        
+        res.json({ 
+            status: "healthy", 
+            timestamp: new Date().toISOString(),
+            files: fileCount
+        });
+    } catch (error) {
+        console.error('Health check error:', error);
+        res.status(500).json({ 
+            status: "unhealthy", 
+            error: "Database connection failed" 
+        });
+    }
 });
 
 // File upload endpoint
-app.post("/upload", multer({ dest: uploadsDir }).single("file"), (req, res) => {
+app.post("/upload", multer({ dest: uploadsDir }).single("file"), async (req, res) => {
     try {
         if (!req.file) {
             return res.status(400).json({ error: "No file uploaded" });
         }
 
         const fileId = uuidv4();
-        const fileData = {
-            id: fileId,
-            originalName: req.file.originalname,
-            size: req.file.size,
-            uploadDate: new Date(),
-            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
-            downloadCount: 0,
-            isActive: true
-        };
+        const uploadDate = new Date();
+        const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
-        fileDatabase.set(fileId, fileData);
+        // Insert file metadata into database
+        const insertQuery = `
+            INSERT INTO files (id, original_name, size, upload_date, expires_at, download_count, is_active)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `;
+        
+        await pool.query(insertQuery, [
+            fileId,
+            req.file.originalname,
+            req.file.size,
+            uploadDate,
+            expiresAt,
+            0,
+            true
+        ]);
 
-        const downloadLink = `${req.protocol}://${req.get("host")}/download/${fileId}`;
+        const downloadLink = `https://api.quicksend.vip/download/${fileId}`;
         
         res.json({
             success: true,
             fileId: fileId,
             downloadLink: downloadLink,
-            fileName: fileData.originalName,
-            fileSize: fileData.size,
-            expiresAt: fileData.expiresAt.toISOString()
+            fileName: req.file.originalname,
+            fileSize: req.file.size,
+            expiresAt: expiresAt.toISOString()
         });
     } catch (error) {
         console.error("Upload error:", error);
@@ -68,17 +111,26 @@ app.post("/upload", multer({ dest: uploadsDir }).single("file"), (req, res) => {
 });
 
 // File download endpoint
-app.get("/download/:fileId", (req, res) => {
+app.get("/download/:fileId", async (req, res) => {
     try {
         const fileId = req.params.fileId;
-        const fileData = fileDatabase.get(fileId);
-
-        if (!fileData || !fileData.isActive) {
+        
+        // Get file data from database
+        const result = await pool.query('SELECT * FROM files WHERE id = $1', [fileId]);
+        
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: "File not found" });
+        }
+        
+        const fileData = result.rows[0];
+        
+        if (!fileData.is_active) {
             return res.status(404).json({ error: "File not found" });
         }
 
-        if (new Date() > fileData.expiresAt) {
-            fileData.isActive = false;
+        if (new Date() > new Date(fileData.expires_at)) {
+            // Mark file as inactive
+            await pool.query('UPDATE files SET is_active = false WHERE id = $1', [fileId]);
             return res.status(410).json({ error: "File has expired" });
         }
 
@@ -87,8 +139,10 @@ app.get("/download/:fileId", (req, res) => {
             return res.status(404).json({ error: "File not found" });
         }
 
-        fileData.downloadCount++;
-        res.download(filePath, fileData.originalName);
+        // Increment download count
+        await pool.query('UPDATE files SET download_count = download_count + 1 WHERE id = $1', [fileId]);
+        
+        res.download(filePath, fileData.original_name);
     } catch (error) {
         console.error("Download error:", error);
         res.status(500).json({ error: "Download failed" });
@@ -96,23 +150,21 @@ app.get("/download/:fileId", (req, res) => {
 });
 
 // List files endpoint
-app.get("/files", (req, res) => {
+app.get("/files", async (req, res) => {
     try {
-        const files = [];
-        for (const [fileId, fileData] of fileDatabase) {
-            if (fileData.isActive) {
-                files.push({
-                    id: fileId,
-                    name: fileData.originalName,
-                    size: fileData.size,
-                    uploadDate: fileData.uploadDate,
-                    fileName: fileData.originalName,
-            fileSize: fileData.size,
-            expiresAt: fileData.expiresAt.toISOString(),
-                    downloadCount: fileData.downloadCount
-                });
-            }
-        }
+        const result = await pool.query('SELECT * FROM files WHERE is_active = true ORDER BY upload_date DESC');
+        
+        const files = result.rows.map(row => ({
+            id: row.id,
+            name: row.original_name,
+            size: row.size,
+            uploadDate: row.upload_date,
+            fileName: row.original_name,
+            fileSize: row.size,
+            expiresAt: row.expires_at,
+            downloadCount: row.download_count
+        }));
+        
         res.json(files);
     } catch (error) {
         console.error("Files list error:", error);
@@ -121,13 +173,17 @@ app.get("/files", (req, res) => {
 });
 
 // Start server
-app.listen(PORT, "0.0.0.0", () => {
+app.listen(PORT, "0.0.0.0", async () => {
     console.log(`QuickSend API server running on port ${PORT}`);
     console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
     console.log(`Upload endpoint: /upload`);
     console.log(`Download endpoint: /download/:fileId`);
     console.log(`Health check: /health`);
-    console.log(`Database loaded with ${fileDatabase.size} files`);
+    
+    // Initialize database
+    await initializeDatabase();
+    
+    console.log(`Database connected and initialized`);
 });
 
 module.exports = app;
