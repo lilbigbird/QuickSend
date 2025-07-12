@@ -700,9 +700,21 @@ app.get("/download/:fileId", async (req, res) => {
         
         console.log(`[Worker ${process.pid}] File found: ${fileData.original_name}`);
         
+        // Check if file is active
         if (!fileData.is_active) {
             console.log(`[Worker ${process.pid}] File is inactive: ${fileId}`);
             return res.status(404).json({ error: "File not found" });
+        }
+        
+        // Check if file has been successfully uploaded to S3
+        if (fileData.status === 'pending') {
+            console.log(`[Worker ${process.pid}] File upload still in progress: ${fileId}`);
+            return res.status(423).json({ error: "File upload in progress, please try again in a moment" });
+        }
+        
+        if (fileData.status === 'failed') {
+            console.log(`[Worker ${process.pid}] File upload failed: ${fileId}`);
+            return res.status(500).json({ error: "File upload failed" });
         }
 
         if (new Date() > new Date(fileData.expires_at)) {
@@ -729,6 +741,20 @@ app.get("/download/:fileId", async (req, res) => {
             const generatePresignedUrl = async (retries = 3) => {
                 for (let attempt = 1; attempt <= retries; attempt++) {
                     try {
+                        // First, verify the file exists in S3
+                        try {
+                            await s3.headObject({
+                                Bucket: fileData.s3_bucket,
+                                Key: fileData.s3_key
+                            }).promise();
+                            console.log(`[Worker ${process.pid}] File verified in S3: ${fileId}`);
+                        } catch (headError) {
+                            console.error(`[Worker ${process.pid}] File not found in S3: ${fileId}`, headError);
+                            // Update status to failed if file doesn't exist in S3
+                            await pool.query('UPDATE files SET status = $1 WHERE id = $2', ['failed', fileId]);
+                            throw new Error('File not found in S3');
+                        }
+                        
                         // Properly encode the filename for the Content-Disposition header
                         const encodedFilename = encodeURIComponent(fileData.original_name).replace(/['()]/g, escape);
                         // For large files, use longer expiration and different parameters
