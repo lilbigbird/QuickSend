@@ -359,11 +359,11 @@ class StorageUsageViewController: UIViewController {
         let maxStorage = user?.subscriptionTier.maxFileSize ?? User.SubscriptionTier.free.maxFileSize
         
         let loadingStorageData = StorageData(from: StorageInfoResponse(
-            usedStorage: 0,
-            totalStorage: maxStorage,
             totalFiles: 0,
-            activeFiles: 0,
-            expiredFiles: 0
+            totalSizeBytes: 0,
+            totalSizeMB: "0",
+            totalSizeGB: "0",
+            lastUpdated: ISO8601DateFormatter().string(from: Date())
         ))
         updateUI(with: loadingStorageData)
         
@@ -491,7 +491,7 @@ extension StorageUsageViewController: UITableViewDelegate {
     }
     
     private func copyFileLink(fileId: String) {
-        let link = "https://quicksend-backend.onrender.com/download/\(fileId)"
+        let link = "https://api.quicksend.vip/download/\(fileId)"
         UIPasteboard.general.string = link
         
         let alert = UIAlertController(title: "Link Copied", message: "File link has been copied to clipboard", preferredStyle: .alert)
