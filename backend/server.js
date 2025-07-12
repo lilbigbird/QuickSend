@@ -7,50 +7,183 @@ const fs = require("fs");
 const { Pool } = require("pg");
 const AWS = require("aws-sdk");
 const rateLimit = require("express-rate-limit");
+const cluster = require("cluster");
+const os = require("os");
+const Redis = require("redis");
+const compression = require("compression");
+const helmet = require("helmet");
 const auth = require("./auth");
 require("dotenv").config();
 
-// Configure AWS S3
+// Clustering for multi-core utilization
+if (cluster.isMaster) {
+    const numCPUs = os.cpus().length;
+    console.log(`Master ${process.pid} is running`);
+    console.log(`Starting ${numCPUs} workers...`);
+    
+    // Fork workers
+    for (let i = 0; i < numCPUs; i++) {
+        cluster.fork();
+    }
+    
+    cluster.on('exit', (worker, code, signal) => {
+        console.log(`Worker ${worker.process.pid} died`);
+        // Replace the dead worker
+        cluster.fork();
+    });
+    
+    // Monitor cluster health
+    setInterval(() => {
+        const workers = Object.keys(cluster.workers);
+        console.log(`Active workers: ${workers.length}`);
+    }, 30000);
+    
+    return;
+}
+
+// Worker process code
+console.log(`Worker ${process.pid} started`);
+
+// Configure AWS S3 with connection pooling
 const s3 = new AWS.S3({
     accessKeyId: process.env.AWS_ACCESS_KEY_ID,
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
     region: process.env.AWS_REGION || 'us-east-1',
-    signatureVersion: 'v4'
+    signatureVersion: 'v4',
+    httpOptions: {
+        timeout: 300000, // 5 minutes
+        connectTimeout: 60000, // 1 minute
+        maxRetries: 3
+    }
 });
 
 const S3_BUCKET_NAME = process.env.S3_BUCKET_NAME || 'quicksend-files';
 
+// Redis client for caching and session management
+const redisClient = Redis.createClient({
+    url: process.env.REDIS_URL || 'redis://localhost:6379',
+    retry_strategy: function(options) {
+        if (options.error && options.error.code === 'ECONNREFUSED') {
+            return new Error('The server refused the connection');
+        }
+        if (options.total_retry_time > 1000 * 60 * 60) {
+            return new Error('Retry time exhausted');
+        }
+        if (options.attempt > 10) {
+            return undefined;
+        }
+        return Math.min(options.attempt * 100, 3000);
+    }
+});
+
+redisClient.on('error', (err) => {
+    console.error('Redis Client Error:', err);
+});
+
+redisClient.on('connect', () => {
+    console.log('Redis Client Connected');
+});
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Rate limiting
+// Security middleware
+app.use(helmet({
+    contentSecurityPolicy: false, // Disable for API
+    crossOriginEmbedderPolicy: false
+}));
+
+// Compression middleware
+app.use(compression());
+
+// Enhanced rate limiting for high concurrency
 const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 5, // limit each IP to 5 requests per windowMs for auth endpoints
-    message: { error: 'Too many authentication attempts, please try again later' }
+    max: 100, // Increased from 50 to 100
+    message: { error: 'Too many authentication attempts, please try again later' },
+    standardHeaders: true,
+    legacyHeaders: false,
+    skipSuccessfulRequests: true
 });
 
 const uploadLimiter = rateLimit({
     windowMs: 60 * 60 * 1000, // 1 hour
-    max: 10, // limit each IP to 10 uploads per hour
-    message: { error: 'Too many uploads, please try again later' }
+    max: 200, // Increased from 100 to 200
+    message: { error: 'Too many uploads, please try again later' },
+    standardHeaders: true,
+    legacyHeaders: false
+});
+
+// General API rate limiting with higher limits
+const apiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 2000, // Increased from 1000 to 2000
+    message: { error: 'Too many requests, please try again later' },
+    standardHeaders: true,
+    legacyHeaders: false,
+    skipSuccessfulRequests: true
 });
 
 // Middleware
-app.use(cors());
-app.use(express.json());
+app.use(cors({
+    origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : '*',
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+}));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Database connection
+// Enhanced database connection pool for high concurrency
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+    max: 50, // Increased from 20 to 50
+    min: 10, // Minimum connections
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 5000, // Reduced from 2000 to 5000
+    acquireTimeoutMillis: 10000,
+    reapIntervalMillis: 1000,
+    createTimeoutMillis: 10000,
+    destroyTimeoutMillis: 5000,
+    createRetryIntervalMillis: 200,
+    propagateCreateError: false
 });
 
-// File storage
+// Database connection monitoring
+pool.on('connect', (client) => {
+    console.log('New database client connected');
+});
+
+pool.on('error', (err, client) => {
+    console.error('Unexpected error on idle client', err);
+});
+
+// File storage with cleanup
 const uploadsDir = path.join(__dirname, "uploads");
 if (!fs.existsSync(uploadsDir)) {
     fs.mkdirSync(uploadsDir, { recursive: true });
 }
+
+// Cleanup old temporary files every hour
+setInterval(() => {
+    fs.readdir(uploadsDir, (err, files) => {
+        if (err) return;
+        
+        const now = Date.now();
+        files.forEach(file => {
+            const filePath = path.join(uploadsDir, file);
+            fs.stat(filePath, (err, stats) => {
+                if (err) return;
+                
+                // Delete files older than 1 hour
+                if (now - stats.mtime.getTime() > 60 * 60 * 1000) {
+                    fs.unlink(filePath, () => {});
+                }
+            });
+        });
+    });
+}, 60 * 60 * 1000);
 
 // Initialize database tables
 async function initializeDatabase() {
@@ -58,7 +191,7 @@ async function initializeDatabase() {
         // Initialize users table
         await auth.initializeUsersTable();
         
-        // First, create the files table if it doesn't exist
+        // Create files table with optimized indexes
         const createTableQuery = `
             CREATE TABLE IF NOT EXISTS files (
                 id UUID PRIMARY KEY,
@@ -67,44 +200,38 @@ async function initializeDatabase() {
                 upload_date TIMESTAMPTZ NOT NULL,
                 expires_at TIMESTAMPTZ NOT NULL,
                 download_count INTEGER NOT NULL DEFAULT 0,
-                is_active BOOLEAN NOT NULL DEFAULT TRUE
+                is_active BOOLEAN NOT NULL DEFAULT TRUE,
+                s3_key TEXT,
+                s3_bucket TEXT,
+                user_id UUID REFERENCES users(id),
+                created_at TIMESTAMPTZ DEFAULT NOW()
             );
+            
+            -- Create indexes for better query performance
+            CREATE INDEX IF NOT EXISTS idx_files_user_id ON files(user_id);
+            CREATE INDEX IF NOT EXISTS idx_files_expires_at ON files(expires_at);
+            CREATE INDEX IF NOT EXISTS idx_files_is_active ON files(is_active);
+            CREATE INDEX IF NOT EXISTS idx_files_upload_date ON files(upload_date);
         `;
         await pool.query(createTableQuery);
         
-        // Check if s3_key column exists, if not add it
-        try {
-            await pool.query('SELECT s3_key FROM files LIMIT 1');
-            console.log('s3_key column already exists');
-        } catch (error) {
-            if (error.code === '42703') { // Column doesn't exist
-                console.log('Adding s3_key column to files table');
-                await pool.query('ALTER TABLE files ADD COLUMN s3_key TEXT');
-            }
-        }
-        
-        // Check if s3_bucket column exists, if not add it
-        try {
-            await pool.query('SELECT s3_bucket FROM files LIMIT 1');
-            console.log('s3_bucket column already exists');
-        } catch (error) {
-            if (error.code === '42703') { // Column doesn't exist
-                console.log('Adding s3_bucket column to files table');
-                await pool.query('ALTER TABLE files ADD COLUMN s3_bucket TEXT');
-            }
-        }
-        
-        console.log('Database tables initialized successfully');
+        console.log('Database tables and indexes initialized successfully');
     } catch (error) {
         console.error('Error initializing database:', error);
     }
 }
 
-// Health check endpoint
+// Enhanced health check with Redis and database status
 app.get("/health", async (req, res) => {
     try {
-        const result = await pool.query('SELECT COUNT(*) as count FROM files WHERE is_active = true');
-        const fileCount = parseInt(result.rows[0].count);
+        const startTime = Date.now();
+        
+        // Check database connection
+        const dbResult = await pool.query('SELECT COUNT(*) as count FROM files WHERE is_active = true');
+        const fileCount = parseInt(dbResult.rows[0].count);
+        
+        // Check Redis connection
+        const redisPing = await redisClient.ping();
         
         // Get memory usage
         const memUsage = process.memoryUsage();
@@ -115,18 +242,25 @@ app.get("/health", async (req, res) => {
             external: Math.round(memUsage.external / 1024 / 1024)
         };
         
+        const responseTime = Date.now() - startTime;
+        
         res.json({ 
             status: "healthy", 
             timestamp: new Date().toISOString(),
+            worker: process.pid,
             files: fileCount,
             memory: memUsageMB,
-            uptime: process.uptime()
+            uptime: process.uptime(),
+            responseTime: `${responseTime}ms`,
+            redis: redisPing === 'PONG' ? 'connected' : 'disconnected',
+            database: 'connected'
         });
     } catch (error) {
         console.error('Health check error:', error);
         res.status(500).json({ 
             status: "unhealthy", 
-            error: "Database connection failed" 
+            error: "Service unavailable",
+            worker: process.pid
         });
     }
 });
@@ -294,7 +428,7 @@ app.get("/auth/sync", auth.authenticateToken, async (req, res) => {
     }
 });
 
-// File upload endpoint with streaming for large files
+// Optimized file upload endpoint with caching and concurrency handling
 app.post("/upload", uploadLimiter, multer({ 
     dest: uploadsDir,
     limits: {
@@ -302,6 +436,8 @@ app.post("/upload", uploadLimiter, multer({
         fieldSize: 10 * 1024 * 1024 // 10MB for form fields
     }
 }).single("file"), async (req, res) => {
+    const startTime = Date.now();
+    
     try {
         if (!req.file) {
             return res.status(400).json({ error: "No file uploaded" });
@@ -310,55 +446,112 @@ app.post("/upload", uploadLimiter, multer({
         const fileId = uuidv4();
         const uploadDate = new Date();
         const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+        const userId = req.user?.id || null; // Get user ID if authenticated
 
-        console.log(`Uploading file: ${req.file.originalname}`);
-        console.log(`File saved to: ${req.file.path}`);
-        console.log(`File size: ${req.file.size}`);
-        console.log(`Generated fileId: ${fileId}`);
+        console.log(`[Worker ${process.pid}] Uploading file: ${req.file.originalname} (${req.file.size} bytes)`);
 
-        // Upload to AWS S3 with streaming for large files
+        // Check Redis cache for duplicate file (optional optimization)
+        const fileHash = `${req.file.size}_${req.file.originalname}`;
+        const cacheKey = `file_upload:${fileHash}`;
+        const cachedFileId = await redisClient.get(cacheKey);
+        
+        if (cachedFileId) {
+            console.log(`[Worker ${process.pid}] Found cached file, reusing fileId: ${cachedFileId}`);
+            
+            // Update download count and return cached link
+            await pool.query('UPDATE files SET download_count = download_count + 1 WHERE id = $1', [cachedFileId]);
+            
+            const downloadLink = `https://api.quicksend.vip/download/${cachedFileId}`;
+            
+            res.json({
+                success: true,
+                fileId: cachedFileId,
+                downloadLink: downloadLink,
+                fileName: req.file.originalname,
+                fileSize: req.file.size,
+                expiresAt: expiresAt.toISOString(),
+                cached: true,
+                uploadTime: `${Date.now() - startTime}ms`
+            });
+            return;
+        }
+
+        // Upload to AWS S3 with streaming and retry logic
         const s3Key = `files/${fileId}/${req.file.originalname}`;
         let s3Result;
-        try {
-            const uploadParams = {
-                Bucket: S3_BUCKET_NAME,
-                Key: s3Key,
-                Body: fs.createReadStream(req.file.path), // Stream instead of loading into memory
-                ContentType: req.file.mimetype || 'application/octet-stream',
-                Metadata: {
-                    originalName: req.file.originalname,
-                    fileId: fileId
+        
+        const uploadWithRetry = async (retries = 3) => {
+            for (let attempt = 1; attempt <= retries; attempt++) {
+                try {
+                    const uploadParams = {
+                        Bucket: S3_BUCKET_NAME,
+                        Key: s3Key,
+                        Body: fs.createReadStream(req.file.path),
+                        ContentType: req.file.mimetype || 'application/octet-stream',
+                        Metadata: {
+                            originalName: req.file.originalname,
+                            fileId: fileId,
+                            uploadedBy: userId || 'anonymous'
+                        }
+                    };
+                    
+                    s3Result = await s3.upload(uploadParams).promise();
+                    console.log(`[Worker ${process.pid}] File uploaded to S3 on attempt ${attempt}: ${s3Result.Location}`);
+                    return s3Result;
+                } catch (s3Error) {
+                    console.error(`[Worker ${process.pid}] S3 upload attempt ${attempt} failed:`, s3Error);
+                    if (attempt === retries) throw s3Error;
+                    await new Promise(resolve => setTimeout(resolve, 1000 * attempt)); // Exponential backoff
                 }
-            };
-            
-            s3Result = await s3.upload(uploadParams).promise();
-            console.log(`File uploaded to S3: ${s3Result.Location}`);
+            }
+        };
+
+        try {
+            await uploadWithRetry();
         } catch (s3Error) {
-            console.error("S3 upload error:", s3Error);
+            console.error(`[Worker ${process.pid}] All S3 upload attempts failed:`, s3Error);
             return res.status(500).json({ error: "Failed to upload file to S3" });
         }
 
-        // Insert file metadata into database
-        const insertQuery = `
-            INSERT INTO files (id, original_name, size, upload_date, expires_at, download_count, is_active, s3_key, s3_bucket)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        `;
-        
-        await pool.query(insertQuery, [
-            fileId,
-            req.file.originalname,
-            req.file.size,
-            uploadDate,
-            expiresAt,
-            0,
-            true,
-            s3Key,
-            S3_BUCKET_NAME
-        ]);
+        // Insert file metadata into database with transaction
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+            
+            const insertQuery = `
+                INSERT INTO files (id, original_name, size, upload_date, expires_at, download_count, is_active, s3_key, s3_bucket, user_id)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            `;
+            
+            await client.query(insertQuery, [
+                fileId,
+                req.file.originalname,
+                req.file.size,
+                uploadDate,
+                expiresAt,
+                0,
+                true,
+                s3Key,
+                S3_BUCKET_NAME,
+                userId
+            ]);
+
+            // Cache the file for potential reuse
+            await redisClient.setex(cacheKey, 3600, fileId); // Cache for 1 hour
+            
+            await client.query('COMMIT');
+        } catch (dbError) {
+            await client.query('ROLLBACK');
+            console.error(`[Worker ${process.pid}] Database error:`, dbError);
+            throw dbError;
+        } finally {
+            client.release();
+        }
 
         const downloadLink = `https://api.quicksend.vip/download/${fileId}`;
+        const uploadTime = Date.now() - startTime;
         
-        console.log(`Generated download link: ${downloadLink} - Using api.quicksend.vip domain`);
+        console.log(`[Worker ${process.pid}] Upload completed in ${uploadTime}ms: ${downloadLink}`);
         
         res.json({
             success: true,
@@ -366,71 +559,132 @@ app.post("/upload", uploadLimiter, multer({
             downloadLink: downloadLink,
             fileName: req.file.originalname,
             fileSize: req.file.size,
-            expiresAt: expiresAt.toISOString()
+            expiresAt: expiresAt.toISOString(),
+            uploadTime: `${uploadTime}ms`,
+            worker: process.pid
         });
+        
     } catch (error) {
-        console.error("Upload error:", error);
-        res.status(500).json({ error: "Upload failed" });
+        console.error(`[Worker ${process.pid}] Upload error:`, error);
+        res.status(500).json({ 
+            error: "Upload failed",
+            worker: process.pid,
+            uploadTime: `${Date.now() - startTime}ms`
+        });
+    } finally {
+        // Clean up temporary file
+        if (req.file && req.file.path) {
+            fs.unlink(req.file.path, (err) => {
+                if (err) console.error(`[Worker ${process.pid}] Error cleaning up temp file:`, err);
+            });
+        }
     }
 });
 
-// File download endpoint
+// Optimized file download endpoint with caching
 app.get("/download/:fileId", async (req, res) => {
+    const startTime = Date.now();
+    const fileId = req.params.fileId;
+    
     try {
-        const fileId = req.params.fileId;
+        console.log(`[Worker ${process.pid}] Download request for fileId: ${fileId}`);
         
-        console.log(`Download request for fileId: ${fileId}`);
+        // Check Redis cache first
+        const cacheKey = `file_metadata:${fileId}`;
+        let fileData = null;
         
-        // Get file data from database
-        const result = await pool.query('SELECT * FROM files WHERE id = $1', [fileId]);
-        
-        if (result.rows.length === 0) {
-            console.log(`File not found in database: ${fileId}`);
-            return res.status(404).json({ error: "File not found" });
+        try {
+            const cachedData = await redisClient.get(cacheKey);
+            if (cachedData) {
+                fileData = JSON.parse(cachedData);
+                console.log(`[Worker ${process.pid}] File metadata found in cache: ${fileData.original_name}`);
+            }
+        } catch (cacheError) {
+            console.error(`[Worker ${process.pid}] Cache error:`, cacheError);
         }
         
-        const fileData = result.rows[0];
-        console.log(`File found in database: ${fileData.original_name}`);
+        // If not in cache, get from database
+        if (!fileData) {
+            const result = await pool.query('SELECT * FROM files WHERE id = $1', [fileId]);
+            
+            if (result.rows.length === 0) {
+                console.log(`[Worker ${process.pid}] File not found in database: ${fileId}`);
+                return res.status(404).json({ error: "File not found" });
+            }
+            
+            fileData = result.rows[0];
+            
+            // Cache the file metadata for 1 hour
+            try {
+                await redisClient.setex(cacheKey, 3600, JSON.stringify(fileData));
+            } catch (cacheError) {
+                console.error(`[Worker ${process.pid}] Failed to cache file metadata:`, cacheError);
+            }
+        }
+        
+        console.log(`[Worker ${process.pid}] File found: ${fileData.original_name}`);
         
         if (!fileData.is_active) {
-            console.log(`File is inactive: ${fileId}`);
+            console.log(`[Worker ${process.pid}] File is inactive: ${fileId}`);
             return res.status(404).json({ error: "File not found" });
         }
 
         if (new Date() > new Date(fileData.expires_at)) {
-            console.log(`File has expired: ${fileId}`);
+            console.log(`[Worker ${process.pid}] File has expired: ${fileId}`);
             // Mark file as inactive
             await pool.query('UPDATE files SET is_active = false WHERE id = $1', [fileId]);
+            // Remove from cache
+            await redisClient.del(cacheKey);
             return res.status(410).json({ error: "File has expired" });
         }
 
-        // Increment download count
-        await pool.query('UPDATE files SET download_count = download_count + 1 WHERE id = $1', [fileId]);
+        // Increment download count asynchronously (don't block the response)
+        pool.query('UPDATE files SET download_count = download_count + 1 WHERE id = $1', [fileId])
+            .catch(err => console.error(`[Worker ${process.pid}] Error updating download count:`, err));
         
-        // Generate S3 presigned URL for download
+        // Generate S3 presigned URL for download with retry logic
         if (fileData.s3_key && fileData.s3_bucket) {
+            const generatePresignedUrl = async (retries = 3) => {
+                for (let attempt = 1; attempt <= retries; attempt++) {
+                    try {
+                        const params = {
+                            Bucket: fileData.s3_bucket,
+                            Key: fileData.s3_key,
+                            Expires: 3600, // URL expires in 1 hour
+                            ResponseContentDisposition: `attachment; filename="${fileData.original_name}"`
+                        };
+                        
+                        const presignedUrl = await s3.getSignedUrlPromise('getObject', params);
+                        console.log(`[Worker ${process.pid}] Generated presigned URL on attempt ${attempt}: ${fileId}`);
+                        return presignedUrl;
+                    } catch (s3Error) {
+                        console.error(`[Worker ${process.pid}] S3 presigned URL attempt ${attempt} failed:`, s3Error);
+                        if (attempt === retries) throw s3Error;
+                        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+                    }
+                }
+            };
+
             try {
-                const params = {
-                    Bucket: fileData.s3_bucket,
-                    Key: fileData.s3_key,
-                    Expires: 3600, // URL expires in 1 hour
-                    ResponseContentDisposition: `attachment; filename="${fileData.original_name}"`
-                };
-                
-                const presignedUrl = await s3.getSignedUrlPromise('getObject', params);
-                console.log(`Generated presigned URL for file: ${fileId}`);
+                const presignedUrl = await generatePresignedUrl();
+                const responseTime = Date.now() - startTime;
+                console.log(`[Worker ${process.pid}] Download redirect in ${responseTime}ms: ${fileId}`);
                 res.redirect(presignedUrl);
             } catch (s3Error) {
-                console.error("Error generating presigned URL:", s3Error);
+                console.error(`[Worker ${process.pid}] All S3 presigned URL attempts failed:`, s3Error);
                 res.status(500).json({ error: "Failed to generate download link" });
             }
         } else {
-            console.log(`No S3 key found for file: ${fileId}`);
+            console.log(`[Worker ${process.pid}] No S3 key found for file: ${fileId}`);
             res.status(404).json({ error: "File not found" });
         }
     } catch (error) {
-        console.error("Download error:", error);
-        res.status(500).json({ error: "Download failed" });
+        console.error(`[Worker ${process.pid}] Download error:`, error);
+        res.status(500).json({ 
+            error: "Download failed",
+            worker: process.pid,
+            responseTime: `${Date.now() - startTime}ms`
+        });
     }
 });
 

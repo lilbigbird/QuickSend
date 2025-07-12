@@ -11,10 +11,53 @@ class NetworkService {
     // For production (App Store)
     private let baseURL = "https://api.quicksend.vip" // Your custom domain
     
-    private init() {}
+    // Optimized URLSession configuration for high concurrency
+    private lazy var optimizedSession: URLSession = {
+        let configuration = URLSessionConfiguration.default
+        configuration.timeoutIntervalForRequest = 300 // 5 minutes
+        configuration.timeoutIntervalForResource = 600 // 10 minutes
+        configuration.httpMaximumConnectionsPerHost = 10 // Allow multiple concurrent connections
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        configuration.urlCache = nil // Disable cache for file uploads
+        configuration.waitsForConnectivity = true
+        configuration.allowsCellularAccess = true
+        configuration.allowsExpensiveNetworkAccess = true
+        configuration.allowsConstrainedNetworkAccess = true
+        return URLSession(configuration: configuration)
+    }()
     
-    // MARK: - File Upload (S3)
+    // Background session for large file uploads
+    private lazy var backgroundSession: URLSession = {
+        let configuration = URLSessionConfiguration.background(withIdentifier: "com.quicksend.background")
+        configuration.timeoutIntervalForRequest = 600 // 10 minutes
+        configuration.timeoutIntervalForResource = 3600 // 1 hour
+        configuration.httpMaximumConnectionsPerHost = 5
+        configuration.sessionSendsLaunchEvents = true
+        configuration.isDiscretionary = false
+        return URLSession(configuration: configuration, delegate: nil, delegateQueue: nil)
+    }()
+    
+    // Operation queue for managing concurrent operations
+    private let operationQueue = OperationQueue()
+    
+    private init() {
+        // Configure operation queue for optimal concurrency
+        operationQueue.maxConcurrentOperationCount = 5
+        operationQueue.qualityOfService = .userInitiated
+    }
+    
+    // MARK: - Concurrent Upload Manager
+    private var activeUploads: [String: URLSessionUploadTask] = [:]
+    private let uploadQueue = DispatchQueue(label: "com.quicksend.upload", qos: .userInitiated, attributes: .concurrent)
+    
+    // MARK: - File Upload (S3) with Concurrency Management
     func uploadFile(fileURL: URL, progressHandler: @escaping (Float) -> Void, completion: @escaping (Result<UploadResponse, NetworkError>) -> Void) {
+        let uploadId = UUID().uuidString
+        
+        // Add to active uploads
+        uploadQueue.async(flags: .barrier) {
+            self.activeUploads[uploadId] = nil // Will be set when task is created
+        }
         guard let url = URL(string: "\(baseURL)/upload") else {
             completion(.failure(.invalidURL))
             return
@@ -75,8 +118,13 @@ class NetworkService {
         configuration.timeoutIntervalForResource = 600 // 10 minutes
         let session = URLSession(configuration: configuration)
         
-        // Use uploadTask for large files with progress tracking
-        let task = session.uploadTask(with: request, from: body) { data, response, error in
+        // Use optimized session for better concurrency
+        let task = optimizedSession.uploadTask(with: request, from: body) { [weak self] data, response, error in
+            // Remove from active uploads
+            self?.uploadQueue.async(flags: .barrier) {
+                self?.activeUploads.removeValue(forKey: uploadId)
+            }
+            
             DispatchQueue.main.async {
                 if let error = error {
                     completion(.failure(.networkError(error)))
@@ -107,6 +155,11 @@ class NetworkService {
             }
         }
         
+        // Store task in active uploads
+        uploadQueue.async(flags: .barrier) {
+            self.activeUploads[uploadId] = task
+        }
+        
         // Monitor upload progress
         let observation = task.progress.observe(\.fractionCompleted) { progress, _ in
             DispatchQueue.main.async {
@@ -118,6 +171,33 @@ class NetworkService {
         objc_setAssociatedObject(task, "progressObservation", observation, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         
         task.resume()
+    }
+    
+    // MARK: - Upload Management
+    func cancelAllUploads() {
+        uploadQueue.async(flags: .barrier) {
+            for (_, task) in self.activeUploads {
+                task.cancel()
+            }
+            self.activeUploads.removeAll()
+        }
+    }
+    
+    func getActiveUploadCount() -> Int {
+        var count = 0
+        uploadQueue.sync {
+            count = self.activeUploads.count
+        }
+        return count
+    }
+    
+    func cancelUpload(withId uploadId: String) {
+        uploadQueue.async(flags: .barrier) {
+            if let task = self.activeUploads[uploadId] {
+                task.cancel()
+                self.activeUploads.removeValue(forKey: uploadId)
+            }
+        }
     }
     
     private func requestUploadURL(fileName: String, fileSize: Int64, completion: @escaping (Result<UploadURLResponse, NetworkError>) -> Void) {
