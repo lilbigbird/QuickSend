@@ -69,13 +69,13 @@ class NetworkService {
         // Add closing boundary
         body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
         
-        // Create a longer timeout for large files
+        // Create a custom URLSession with progress tracking
         let configuration = URLSessionConfiguration.default
         configuration.timeoutIntervalForRequest = 300 // 5 minutes
         configuration.timeoutIntervalForResource = 600 // 10 minutes
         let session = URLSession(configuration: configuration)
         
-        // Use uploadTask for large files instead of dataTask
+        // Use uploadTask for large files with progress tracking
         let task = session.uploadTask(with: request, from: body) { data, response, error in
             DispatchQueue.main.async {
                 if let error = error {
@@ -106,6 +106,16 @@ class NetworkService {
                 }
             }
         }
+        
+        // Monitor upload progress
+        let observation = task.progress.observe(\.fractionCompleted) { progress, _ in
+            DispatchQueue.main.async {
+                progressHandler(Float(progress.fractionCompleted))
+            }
+        }
+        
+        // Store observation to prevent deallocation
+        objc_setAssociatedObject(task, "progressObservation", observation, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         
         task.resume()
     }

@@ -269,9 +269,9 @@ class HomeViewController: UIViewController {
         view.addSubview(copyLinkButton)
         view.addSubview(shareButton)
         
-        contentView.addSubview(progressView)
-        contentView.addSubview(progressLabel)
-        contentView.addSubview(activityIndicator)
+        // Add progress indicators to main view (not scroll view)
+        view.addSubview(progressView)
+        view.addSubview(progressLabel)
         
         linkOutputView.addSubview(linkLabel)
         
@@ -356,12 +356,14 @@ class HomeViewController: UIViewController {
             shareButton.widthAnchor.constraint(equalTo: view.widthAnchor, multiplier: 0.45),
             shareButton.heightAnchor.constraint(equalToConstant: 40),
             
-            // Activity indicator (above everything else)
-            activityIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            activityIndicator.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            // Link output view
+            linkOutputView.topAnchor.constraint(equalTo: generateLinkButton.bottomAnchor, constant: 16),
+            linkOutputView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
+            linkOutputView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+            linkOutputView.heightAnchor.constraint(equalToConstant: 80),
             
-            // Progress view (between generate button and link output)
-            progressView.topAnchor.constraint(equalTo: generateLinkButton.bottomAnchor, constant: 16),
+            // Progress view (below link output view)
+            progressView.topAnchor.constraint(equalTo: linkOutputView.bottomAnchor, constant: 16),
             progressView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
             progressView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
             progressView.heightAnchor.constraint(equalToConstant: 6),
@@ -369,13 +371,7 @@ class HomeViewController: UIViewController {
             // Progress label (above progress bar)
             progressLabel.bottomAnchor.constraint(equalTo: progressView.topAnchor, constant: -8),
             progressLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
-            progressLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
-            
-            // Link output view (moved down to make room for progress)
-            linkOutputView.topAnchor.constraint(equalTo: progressView.bottomAnchor, constant: 16),
-            linkOutputView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
-            linkOutputView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
-            linkOutputView.heightAnchor.constraint(equalToConstant: 80)
+            progressLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20)
         ])
     }
     
@@ -423,7 +419,6 @@ class HomeViewController: UIViewController {
         
         defer { fileURL.stopAccessingSecurityScopedResource() }
         
-        activityIndicator.startAnimating()
         generateLinkButton.isEnabled = false
         progressView.isHidden = false
         progressLabel.isHidden = false
@@ -434,11 +429,12 @@ class HomeViewController: UIViewController {
                 self.progressView.progress = progress
                 let percentage = Int(progress * 100)
                 let fileSizeString = ByteCountFormatter.string(fromByteCount: fileSize, countStyle: .file)
+                
+                // Simple progress display without complex calculations
                 self.progressLabel.text = "Uploading \(fileSizeString)... \(percentage)%"
             }
         }) { result in
             DispatchQueue.main.async {
-                self.activityIndicator.stopAnimating()
                 self.generateLinkButton.isEnabled = true
                 self.progressView.isHidden = true
                 self.progressLabel.isHidden = true
@@ -570,6 +566,8 @@ class HomeViewController: UIViewController {
         generateLinkButton.isEnabled = true
         generateLinkButton.alpha = 1.0
     }
+    
+
 }
 
 // MARK: - UIDocumentPickerDelegate
