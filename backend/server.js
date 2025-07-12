@@ -868,7 +868,7 @@ app.post('/s3/upload-url', async (req, res) => {
   console.log(`[Worker ${process.pid}] S3 upload URL request received`);
   console.log(`[Worker ${process.pid}] Request body:`, req.body);
   
-  const { fileName, fileType } = req.body;
+  const { fileName, fileType, fileSize } = req.body;
   if (!fileName || !fileType) {
     return res.status(400).json({ error: 'fileName and fileType are required' });
   }
@@ -879,6 +879,9 @@ app.post('/s3/upload-url', async (req, res) => {
   
   const fileId = uuidv4();
   const s3Key = `files/${fileId}/${fileName}`;
+  const uploadDate = new Date();
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+  
   // For large files, use longer expiration time
   const expirationTime = 3600; // 1 hour for large files (increased from 10 minutes)
   
@@ -891,16 +894,97 @@ app.post('/s3/upload-url', async (req, res) => {
       uploadedBy: userId
     }
   };
+  
   try {
+    // Create database record first
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const insertQuery = `
+        INSERT INTO files (id, original_name, size, upload_date, expires_at, download_count, is_active, s3_key, s3_bucket, user_id, status)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      `;
+      await client.query(insertQuery, [
+        fileId,
+        fileName,
+        fileSize || 0,
+        uploadDate,
+        expiresAt,
+        0,
+        true,
+        s3Key,
+        S3_BUCKET_NAME,
+        userId,
+        'pending'
+      ]);
+      await client.query('COMMIT');
+      console.log(`[Worker ${process.pid}] Created database record for fileId: ${fileId}`);
+    } catch (dbError) {
+      await client.query('ROLLBACK');
+      console.error(`[Worker ${process.pid}] Database error:`, dbError);
+      throw dbError;
+    } finally {
+      client.release();
+    }
+    
     const url = await s3.getSignedUrlPromise('putObject', params);
     console.log(`[Worker ${process.pid}] Generated S3 upload URL for fileId: ${fileId}`);
-    
-
     
     res.json({ url, fileId, s3Key });
   } catch (err) {
     console.error('S3 upload URL generation error:', err);
     res.status(500).json({ error: 'Failed to generate upload URL' });
+  }
+});
+
+// S3 Upload Complete - Update file status after successful S3 upload
+app.post('/s3/upload-complete', async (req, res) => {
+  console.log(`[Worker ${process.pid}] S3 upload complete request received`);
+  console.log(`[Worker ${process.pid}] Request body:`, req.body);
+  
+  const { fileId, fileSize } = req.body;
+  if (!fileId) {
+    return res.status(400).json({ error: 'fileId is required' });
+  }
+  
+  try {
+    // Verify the file exists in S3
+    const result = await pool.query('SELECT s3_key, s3_bucket FROM files WHERE id = $1', [fileId]);
+    
+    if (result.rows.length === 0) {
+      console.log(`[Worker ${process.pid}] File not found in database: ${fileId}`);
+      return res.status(404).json({ error: 'File not found' });
+    }
+    
+    const fileData = result.rows[0];
+    
+    try {
+      await s3.headObject({
+        Bucket: fileData.s3_bucket,
+        Key: fileData.s3_key
+      }).promise();
+      console.log(`[Worker ${process.pid}] File verified in S3: ${fileId}`);
+    } catch (headError) {
+      console.error(`[Worker ${process.pid}] File not found in S3: ${fileId}`, headError);
+      return res.status(404).json({ error: 'File not found in S3' });
+    }
+    
+    // Update file status to 'uploaded' and update file size if provided
+    const updateQuery = fileSize ? 
+      'UPDATE files SET status = $1, size = $2 WHERE id = $3' :
+      'UPDATE files SET status = $1 WHERE id = $3';
+    
+    const updateParams = fileSize ? 
+      ['uploaded', fileSize, fileId] :
+      ['uploaded', fileId];
+    
+    await pool.query(updateQuery, updateParams);
+    console.log(`[Worker ${process.pid}] Updated file status to uploaded: ${fileId}`);
+    
+    res.json({ success: true, message: 'Upload completed successfully' });
+  } catch (err) {
+    console.error(`[Worker ${process.pid}] Upload complete error:`, err);
+    res.status(500).json({ error: 'Failed to complete upload' });
   }
 });
 

@@ -59,7 +59,8 @@ class NetworkService {
         print("📤 File type: \(fileType)")
         
         // Step 1: Get presigned upload URL from backend
-        getS3UploadURL(fileName: fileName, fileType: fileType) { [weak self] result in
+        let fileSize = getFileSize(fileURL: fileURL)
+        getS3UploadURL(fileName: fileName, fileType: fileType, fileSize: fileSize) { [weak self] result in
             switch result {
             case .success(let s3Response):
                 print("✅ Got presigned URL for file: \(fileName)")
@@ -74,17 +75,27 @@ class NetworkService {
                     switch uploadResult {
                     case .success:
                         print("✅ S3 upload successful for file: \(fileName)")
-                        // Create UploadResponse for compatibility
+                        // Step 3: Notify backend that upload is complete
                         let fileSize = self?.getFileSize(fileURL: fileURL) ?? 0
-                        let uploadResponse = UploadResponse(
-                            success: true,
-                            fileId: s3Response.fileId,
-                            downloadLink: "https://api.quicksend.vip/download/\(s3Response.fileId)",
-                            fileName: fileName,
-                            fileSize: Int(fileSize),
-                            expiresAt: ISO8601DateFormatter().string(from: Date().addingTimeInterval(7 * 24 * 60 * 60))
-                        )
-                        completion(.success(uploadResponse))
+                        self?.notifyUploadComplete(fileId: s3Response.fileId, fileSize: fileSize) { completeResult in
+                            switch completeResult {
+                            case .success:
+                                print("✅ Upload completion notified to backend for file: \(fileName)")
+                                // Create UploadResponse for compatibility
+                                let uploadResponse = UploadResponse(
+                                    success: true,
+                                    fileId: s3Response.fileId,
+                                    downloadLink: "https://api.quicksend.vip/download/\(s3Response.fileId)",
+                                    fileName: fileName,
+                                    fileSize: Int(fileSize),
+                                    expiresAt: ISO8601DateFormatter().string(from: Date().addingTimeInterval(7 * 24 * 60 * 60))
+                                )
+                                completion(.success(uploadResponse))
+                            case .failure(let error):
+                                print("❌ Failed to notify upload completion for file: \(fileName), error: \(error)")
+                                completion(.failure(error))
+                            }
+                        }
                     case .failure(let error):
                         print("❌ S3 upload failed for file: \(fileName), error: \(error)")
                         completion(.failure(error))
@@ -317,7 +328,7 @@ class NetworkService {
     }
     
     // MARK: - S3 Presigned URL Methods
-    func getS3UploadURL(fileName: String, fileType: String, completion: @escaping (Result<S3UploadURLResponse, NetworkError>) -> Void) {
+    func getS3UploadURL(fileName: String, fileType: String, fileSize: Int64? = nil, completion: @escaping (Result<S3UploadURLResponse, NetworkError>) -> Void) {
         guard let url = URL(string: "\(baseURL)/s3/upload-url") else {
             print("❌ Invalid URL: \(baseURL)/s3/upload-url")
             completion(.failure(.invalidURL))
@@ -336,10 +347,14 @@ class NetworkService {
             print("👤 No authentication token available")
         }
         
-        let body: [String: Any] = [
+        var body: [String: Any] = [
             "fileName": fileName,
             "fileType": fileType
         ]
+        
+        if let fileSize = fileSize {
+            body["fileSize"] = fileSize
+        }
         
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
@@ -392,6 +407,68 @@ class NetworkService {
                     print("❌ Failed to decode response: \(error)")
                     completion(.failure(.decodingError(error)))
                 }
+            }
+        }
+        
+        task.resume()
+    }
+    
+    func notifyUploadComplete(fileId: String, fileSize: Int64, completion: @escaping (Result<Void, NetworkError>) -> Void) {
+        guard let url = URL(string: "\(baseURL)/s3/upload-complete") else {
+            print("❌ Invalid URL: \(baseURL)/s3/upload-complete")
+            completion(.failure(.invalidURL))
+            return
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        // Add authentication token if available
+        if let token = UserManager.shared.authToken {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        let body: [String: Any] = [
+            "fileId": fileId,
+            "fileSize": fileSize
+        ]
+        
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+            print("📤 Upload complete request body: \(body)")
+        } catch {
+            print("❌ Failed to encode upload complete request body: \(error)")
+            completion(.failure(.encodingError))
+            return
+        }
+        
+        let task = optimizedSession.dataTask(with: request) { data, response, error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    print("❌ Upload complete network error: \(error)")
+                    completion(.failure(.networkError(error)))
+                    return
+                }
+                
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    print("❌ Invalid upload complete HTTP response")
+                    completion(.failure(.invalidResponse))
+                    return
+                }
+                
+                print("📤 Upload complete response status: \(httpResponse.statusCode)")
+                
+                guard (200...299).contains(httpResponse.statusCode) else {
+                    if let data = data, let responseString = String(data: data, encoding: .utf8) {
+                        print("❌ Upload complete error response: \(responseString)")
+                    }
+                    completion(.failure(.serverError(httpResponse.statusCode)))
+                    return
+                }
+                
+                print("✅ Upload completion notification successful")
+                completion(.success(()))
             }
         }
         
