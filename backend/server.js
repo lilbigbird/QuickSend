@@ -45,10 +45,10 @@ try {
     s3 = null;
 }
 
-// S3 upload configuration for better concurrency
+// S3 upload configuration for better concurrency and large files
 const s3UploadConfig = {
-    partSize: 10 * 1024 * 1024, // 10MB parts for multipart uploads
-    queueSize: 4, // Number of parts to upload concurrently
+    partSize: 100 * 1024 * 1024, // 100MB parts for large files (increased from 10MB)
+    queueSize: 10, // Number of parts to upload concurrently (increased from 4)
     leavePartsOnError: false
 };
 
@@ -697,12 +697,21 @@ app.get("/download/:fileId", async (req, res) => {
                     const s3Object = await s3.headObject(s3Params).promise();
                     const actualSize = s3Object.ContentLength || 0;
                     
+                    console.log(`[Worker ${process.pid}] S3 metadata for ${fileId}:`, {
+                        contentLength: s3Object.ContentLength,
+                        contentType: s3Object.ContentType,
+                        lastModified: s3Object.LastModified,
+                        etag: s3Object.ETag
+                    });
+                    
                     if (actualSize > 0) {
                         // Update database with actual file size
                         await pool.query('UPDATE files SET size = $1, status = $2 WHERE id = $3', [actualSize, 'uploaded', fileId]);
                         fileData.size = actualSize;
                         fileData.status = 'uploaded';
                         console.log(`[Worker ${process.pid}] Updated file size from S3: ${fileId} -> ${actualSize} bytes`);
+                    } else {
+                        console.log(`[Worker ${process.pid}] S3 object exists but has no content length: ${fileId}`);
                     }
                 } catch (s3Error) {
                     console.error(`[Worker ${process.pid}] Error getting S3 metadata:`, s3Error);
@@ -753,12 +762,20 @@ app.get("/download/:fileId", async (req, res) => {
                     try {
                         // Properly encode the filename for the Content-Disposition header
                         const encodedFilename = encodeURIComponent(fileData.original_name).replace(/['()]/g, escape);
+                        // For large files, use longer expiration and different parameters
+                        const isLargeFile = fileData.size > 100 * 1024 * 1024; // 100MB threshold
+                        const expirationTime = isLargeFile ? 7200 : 3600; // 2 hours for large files, 1 hour for others
+                        
                         const params = {
                             Bucket: fileData.s3_bucket,
                             Key: fileData.s3_key,
-                            Expires: 3600, // URL expires in 1 hour
+                            Expires: expirationTime,
                             ResponseContentDisposition: `attachment; filename="${encodedFilename}"; filename*=UTF-8''${encodeURIComponent(fileData.original_name)}`
                         };
+                        
+                        if (isLargeFile) {
+                            console.log(`[Worker ${process.pid}] Generating presigned URL for large file (${fileData.size} bytes) with ${expirationTime}s expiration`);
+                        }
                         
                         const presignedUrl = await s3.getSignedUrlPromise('getObject', params);
                         console.log(`[Worker ${process.pid}] Generated presigned URL on attempt ${attempt}: ${fileId}`);
@@ -867,10 +884,13 @@ app.post('/s3/upload-url', async (req, res) => {
   
   const fileId = uuidv4();
   const s3Key = `files/${fileId}/${fileName}`;
+  // For large files, use longer expiration time
+  const expirationTime = 3600; // 1 hour for large files (increased from 10 minutes)
+  
   const params = {
     Bucket: S3_BUCKET_NAME,
     Key: s3Key,
-    Expires: 600, // 10 minutes
+    Expires: expirationTime,
     ContentType: fileType,
     Metadata: {
       uploadedBy: userId
