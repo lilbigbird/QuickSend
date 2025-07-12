@@ -494,19 +494,54 @@ app.get("/auth/sync", auth.authenticateToken, async (req, res) => {
 });
 
 // Optimized file upload endpoint with caching and concurrency handling
-app.post("/upload", uploadLimiter, multer({ 
-    dest: uploadsDir,
-    limits: {
-        fileSize: 5 * 1024 * 1024 * 1024, // 5GB max
-        fieldSize: 10 * 1024 * 1024 // 10MB for form fields
-    }
-}).single("file"), async (req, res) => {
+app.post("/upload", uploadLimiter, (req, res, next) => {
+    const upload = multer({ 
+        dest: uploadsDir,
+        limits: {
+            fileSize: 5 * 1024 * 1024 * 1024, // 5GB max
+            fieldSize: 10 * 1024 * 1024 // 10MB for form fields
+        }
+    }).single("file");
+    
+    upload(req, res, (err) => {
+        if (err instanceof multer.MulterError) {
+            console.error(`[Worker ${process.pid}] Multer error:`, err);
+            if (err.code === 'LIMIT_FILE_SIZE') {
+                return res.status(400).json({ 
+                    error: "File too large",
+                    details: "Maximum file size is 5GB"
+                });
+            }
+            return res.status(400).json({ 
+                error: "File upload error",
+                details: err.message
+            });
+        } else if (err) {
+            console.error(`[Worker ${process.pid}] Upload error:`, err);
+            return res.status(500).json({ 
+                error: "Upload failed",
+                details: err.message
+            });
+        }
+        next();
+    });
+}, async (req, res) => {
     const startTime = Date.now();
     let fileId, s3Key, userId, uploadDate, expiresAt;
 
     try {
+        console.log(`[Worker ${process.pid}] Upload request received`);
+        console.log(`[Worker ${process.pid}] Request body:`, req.body);
+        console.log(`[Worker ${process.pid}] Request file:`, req.file);
+        console.log(`[Worker ${process.pid}] Request headers:`, req.headers['content-type']);
+
         if (!req.file) {
-            return res.status(400).json({ error: "No file uploaded" });
+            console.error(`[Worker ${process.pid}] No file in request`);
+            return res.status(400).json({ 
+                error: "No file uploaded",
+                details: "Please ensure you're sending a file with the field name 'file'",
+                contentType: req.headers['content-type']
+            });
         }
 
         fileId = uuidv4();
