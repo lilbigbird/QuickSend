@@ -278,6 +278,17 @@ app.get("/test", (req, res) => {
     });
 });
 
+// Test S3 endpoint without authentication
+app.post("/test-s3", async (req, res) => {
+    console.log(`[Worker ${process.pid}] Test S3 endpoint called`);
+    res.json({ 
+        message: "S3 test endpoint working", 
+        timestamp: new Date().toISOString(),
+        pid: process.pid,
+        body: req.body
+    });
+});
+
 // Enhanced health check with Redis and database status
 app.get("/health", async (req, res) => {
     try {
