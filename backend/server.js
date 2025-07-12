@@ -62,12 +62,12 @@ const s3 = new AWS.S3({
     }
 });
 
-// S3 upload manager for better concurrency
-const s3UploadManager = new AWS.S3.ManagedUpload({
+// S3 upload configuration for better concurrency
+const s3UploadConfig = {
     partSize: 10 * 1024 * 1024, // 10MB parts for multipart uploads
     queueSize: 4, // Number of parts to upload concurrently
     leavePartsOnError: false
-});
+};
 
 const S3_BUCKET_NAME = process.env.S3_BUCKET_NAME || 'quicksend-files';
 
