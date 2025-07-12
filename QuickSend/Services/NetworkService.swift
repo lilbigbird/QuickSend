@@ -77,7 +77,7 @@ class NetworkService {
                         
                         // Step 3: Get file size and confirm upload
                         let fileSize = self?.getFileSize(fileURL: fileURL) ?? 0
-                        self?.confirmS3Upload(fileId: s3Response.fileId, fileSize: fileSize) { confirmResult in
+                        self?.confirmS3Upload(fileId: s3Response.fileId, fileSize: Int(fileSize)) { confirmResult in
                             switch confirmResult {
                             case .success:
                                 print("✅ Upload confirmed for file: \(fileName)")
@@ -185,7 +185,7 @@ class NetworkService {
     }
     
     // Confirm S3 upload and update file metadata
-    private func confirmS3Upload(fileId: String, fileSize: Int64, completion: @escaping (Result<Void, NetworkError>) -> Void) {
+    private func confirmS3Upload(fileId: String, fileSize: Int, completion: @escaping (Result<Void, NetworkError>) -> Void) {
         guard let url = URL(string: "\(baseURL)/s3/upload-complete") else {
             completion(.failure(.invalidURL))
             return
