@@ -57,7 +57,9 @@ app.post("/upload", multer({ dest: uploadsDir }).single("file"), (req, res) => {
             success: true,
             fileId: fileId,
             downloadLink: downloadLink,
-            expiresAt: fileData.expiresAt
+            fileName: fileData.originalName,
+            fileSize: fileData.size,
+            expiresAt: fileData.expiresAt.toISOString()
         });
     } catch (error) {
         console.error("Upload error:", error);
@@ -104,7 +106,9 @@ app.get("/files", (req, res) => {
                     name: fileData.originalName,
                     size: fileData.size,
                     uploadDate: fileData.uploadDate,
-                    expiresAt: fileData.expiresAt,
+                    fileName: fileData.originalName,
+            fileSize: fileData.size,
+            expiresAt: fileData.expiresAt.toISOString(),
                     downloadCount: fileData.downloadCount
                 });
             }
