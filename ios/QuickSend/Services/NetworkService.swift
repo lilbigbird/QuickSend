@@ -52,9 +52,14 @@ class NetworkService {
         
         // Create multipart body with streaming for large files
         let body = createMultipartBody(fileURL: fileURL, boundary: boundary, progressHandler: progressHandler)
-        request.httpBody = body
+        // Create a longer timeout for large files
+        let configuration = URLSessionConfiguration.default
+        configuration.timeoutIntervalForRequest = 300 // 5 minutes
+        configuration.timeoutIntervalForResource = 600 // 10 minutes
+        let session = URLSession(configuration: configuration)
         
-        let task = URLSession.shared.dataTask(with: request) { data, response, error in
+        // Use uploadTask for large files instead of dataTask
+        let task = session.uploadTask(with: request, from: body) { data, response, error in
             DispatchQueue.main.async {
                 if let error = error {
                     completion(.failure(.networkError(error)))
