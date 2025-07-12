@@ -45,22 +45,28 @@ if (cluster.isMaster) {
 console.log(`Worker ${process.pid} started`);
 
 // Configure AWS S3 with optimized settings for high concurrency
-const s3 = new AWS.S3({
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-    region: process.env.AWS_REGION || 'us-east-1',
-    signatureVersion: 'v4',
-    httpOptions: {
-        timeout: 300000, // 5 minutes
-        connectTimeout: 60000, // 1 minute
+let s3;
+try {
+    s3 = new AWS.S3({
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+        region: process.env.AWS_REGION || 'us-east-1',
+        signatureVersion: 'v4',
+        httpOptions: {
+            timeout: 300000, // 5 minutes
+            connectTimeout: 60000, // 1 minute
+            maxRetries: 3,
+            agent: false // Disable keep-alive for better concurrency
+        },
         maxRetries: 3,
-        agent: false // Disable keep-alive for better concurrency
-    },
-    maxRetries: 3,
-    retryDelayOptions: {
-        base: 300 // Base delay for retries
-    }
-});
+        retryDelayOptions: {
+            base: 300 // Base delay for retries
+        }
+    });
+} catch (error) {
+    console.error('Error initializing S3:', error);
+    s3 = null;
+}
 
 // S3 upload configuration for better concurrency
 const s3UploadConfig = {
@@ -542,6 +548,12 @@ app.post("/upload", uploadLimiter, multer({
         // Start async S3 upload in background
         setImmediate(async () => {
             try {
+                if (!s3) {
+                    console.error(`[Worker ${process.pid}] S3 not initialized, skipping upload for fileId: ${fileId}`);
+                    await pool.query('UPDATE files SET status = $1 WHERE id = $2', ['failed', fileId]);
+                    return;
+                }
+
                 const uploadParams = {
                     Bucket: S3_BUCKET_NAME,
                     Key: s3Key,
