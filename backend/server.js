@@ -78,6 +78,11 @@ app.post("/upload", multer({ dest: uploadsDir }).single("file"), async (req, res
         const uploadDate = new Date();
         const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
+        console.log(`Uploading file: ${req.file.originalname}`);
+        console.log(`File saved to: ${req.file.path}`);
+        console.log(`File size: ${req.file.size}`);
+        console.log(`Generated fileId: ${fileId}`);
+
         // Insert file metadata into database
         const insertQuery = `
             INSERT INTO files (id, original_name, size, upload_date, expires_at, download_count, is_active)
@@ -95,6 +100,8 @@ app.post("/upload", multer({ dest: uploadsDir }).single("file"), async (req, res
         ]);
 
         const downloadLink = `https://quicksend-backend.onrender.com/download/${fileId}`;
+        
+        console.log(`Generated download link: ${downloadLink}`);
         
         res.json({
             success: true,
@@ -115,33 +122,44 @@ app.get("/download/:fileId", async (req, res) => {
     try {
         const fileId = req.params.fileId;
         
+        console.log(`Download request for fileId: ${fileId}`);
+        
         // Get file data from database
         const result = await pool.query('SELECT * FROM files WHERE id = $1', [fileId]);
         
         if (result.rows.length === 0) {
+            console.log(`File not found in database: ${fileId}`);
             return res.status(404).json({ error: "File not found" });
         }
         
         const fileData = result.rows[0];
+        console.log(`File found in database: ${fileData.original_name}`);
         
         if (!fileData.is_active) {
+            console.log(`File is inactive: ${fileId}`);
             return res.status(404).json({ error: "File not found" });
         }
 
         if (new Date() > new Date(fileData.expires_at)) {
+            console.log(`File has expired: ${fileId}`);
             // Mark file as inactive
             await pool.query('UPDATE files SET is_active = false WHERE id = $1', [fileId]);
             return res.status(410).json({ error: "File has expired" });
         }
 
         const filePath = path.join(uploadsDir, fileId);
+        console.log(`Looking for file at: ${filePath}`);
+        console.log(`File exists: ${fs.existsSync(filePath)}`);
+        
         if (!fs.existsSync(filePath)) {
+            console.log(`File not found on disk: ${filePath}`);
             return res.status(404).json({ error: "File not found" });
         }
 
         // Increment download count
         await pool.query('UPDATE files SET download_count = download_count + 1 WHERE id = $1', [fileId]);
         
+        console.log(`Serving file: ${filePath}`);
         res.download(filePath, fileData.original_name);
     } catch (error) {
         console.error("Download error:", error);
