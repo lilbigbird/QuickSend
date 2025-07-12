@@ -250,13 +250,47 @@ app.get("/files", async (req, res) => {
             fileName: row.original_name,
             fileSize: row.size,
             expiresAt: row.expires_at,
-            downloadCount: row.download_count
+            downloadCount: row.download_count,
+            s3Key: row.s3_key,
+            s3Bucket: row.s3_bucket
         }));
         
-        res.json(files);
+        // Calculate total storage used
+        const totalSize = files.reduce((sum, file) => sum + parseInt(file.size), 0);
+        const totalSizeGB = (totalSize / (1024 * 1024 * 1024)).toFixed(2);
+        
+        res.json({
+            files: files,
+            totalFiles: files.length,
+            totalSizeBytes: totalSize,
+            totalSizeGB: totalSizeGB
+        });
     } catch (error) {
         console.error("Files list error:", error);
         res.status(500).json({ error: "Error listing files" });
+    }
+});
+
+// Storage usage endpoint
+app.get("/storage", async (req, res) => {
+    try {
+        const result = await pool.query('SELECT SUM(size) as total_size, COUNT(*) as file_count FROM files WHERE is_active = true');
+        const totalSize = parseInt(result.rows[0].total_size) || 0;
+        const fileCount = parseInt(result.rows[0].file_count) || 0;
+        
+        const totalSizeGB = (totalSize / (1024 * 1024 * 1024)).toFixed(2);
+        const totalSizeMB = (totalSize / (1024 * 1024)).toFixed(2);
+        
+        res.json({
+            totalFiles: fileCount,
+            totalSizeBytes: totalSize,
+            totalSizeMB: totalSizeMB,
+            totalSizeGB: totalSizeGB,
+            lastUpdated: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error("Storage usage error:", error);
+        res.status(500).json({ error: "Error getting storage usage" });
     }
 });
 
