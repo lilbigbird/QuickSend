@@ -53,30 +53,40 @@ const s3UploadConfig = {
 
 const S3_BUCKET_NAME = process.env.S3_BUCKET_NAME || 'quicksend-files';
 
-// Redis client for caching and session management
-const redisClient = Redis.createClient({
-    url: process.env.REDIS_URL || 'redis://localhost:6379',
-    retry_strategy: function(options) {
-        if (options.error && options.error.code === 'ECONNREFUSED') {
-            return new Error('The server refused the connection');
-        }
-        if (options.total_retry_time > 1000 * 60 * 60) {
-            return new Error('Retry time exhausted');
-        }
-        if (options.attempt > 10) {
-            return undefined;
-        }
-        return Math.min(options.attempt * 100, 3000);
+// Redis client for caching and session management (optional)
+let redisClient = null;
+
+if (process.env.REDIS_URL) {
+    try {
+        redisClient = Redis.createClient({
+            url: process.env.REDIS_URL,
+            retry_strategy: function(options) {
+                if (options.error && options.error.code === 'ECONNREFUSED') {
+                    return new Error('The server refused the connection');
+                }
+                if (options.total_retry_time > 1000 * 60 * 60) {
+                    return new Error('Retry time exhausted');
+                }
+                if (options.attempt > 10) {
+                    return undefined;
+                }
+                return Math.min(options.attempt * 100, 3000);
+            }
+        });
+
+        redisClient.on('error', (err) => {
+            console.error('Redis Client Error:', err);
+        });
+
+        redisClient.on('connect', () => {
+            console.log('✅ Redis Client Connected');
+        });
+    } catch (error) {
+        console.log('⚠️ Redis not configured, running without caching');
     }
-});
-
-redisClient.on('error', (err) => {
-    console.error('Redis Client Error:', err);
-});
-
-redisClient.on('connect', () => {
-    console.log('Redis Client Connected');
-});
+} else {
+    console.log('⚠️ Redis not configured, running without caching');
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -278,12 +288,14 @@ app.get("/health", async (req, res) => {
         const fileCount = parseInt(dbResult.rows[0].count);
         
         // Check Redis connection (optional)
-        let redisStatus = 'disconnected';
-        try {
-            const redisPing = await redisClient.ping();
-            redisStatus = redisPing === 'PONG' ? 'connected' : 'disconnected';
-        } catch (redisError) {
-            console.log('Redis not available:', redisError.message);
+        let redisStatus = 'not configured';
+        if (redisClient) {
+            try {
+                const redisPing = await redisClient.ping();
+                redisStatus = redisPing === 'PONG' ? 'connected' : 'disconnected';
+            } catch (redisError) {
+                redisStatus = 'error';
+            }
         }
         
         // Get memory usage
