@@ -234,6 +234,66 @@ app.get("/auth/profile", auth.authenticateToken, async (req, res) => {
     }
 });
 
+// Update user subscription
+app.post("/auth/update-subscription", auth.authenticateToken, async (req, res) => {
+    try {
+        const { subscriptionTier } = req.body;
+        
+        if (!subscriptionTier || !['free', 'pro', 'business'].includes(subscriptionTier)) {
+            return res.status(400).json({ 
+                success: false, 
+                error: "Invalid subscription tier. Must be 'free', 'pro', or 'business'" 
+            });
+        }
+
+        const updatedUser = await auth.updateSubscription(req.user.id, subscriptionTier);
+        
+        res.json({
+            success: true,
+            user: {
+                id: updatedUser.id,
+                email: updatedUser.email,
+                name: updatedUser.name,
+                subscriptionTier: updatedUser.subscription_tier,
+                createdAt: updatedUser.created_at,
+                lastSignIn: updatedUser.last_login
+            }
+        });
+    } catch (error) {
+        console.error('Subscription update error:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: "Failed to update subscription" 
+        });
+    }
+});
+
+// Sync user data (for when user logs in on new device)
+app.get("/auth/sync", auth.authenticateToken, async (req, res) => {
+    try {
+        const user = await auth.getUserById(req.user.id);
+        if (!user) {
+            return res.status(404).json({ error: "User not found" });
+        }
+        
+        res.json({
+            success: true,
+            user: {
+                id: user.id,
+                email: user.email,
+                name: user.name,
+                phone: user.phone,
+                subscriptionTier: user.subscription_tier,
+                createdAt: user.created_at,
+                lastSignIn: user.last_login
+            }
+        });
+    } catch (error) {
+        console.error('Sync error:', error);
+        res.status(500).json({ error: "Failed to sync user data" });
+    }
+});
+
 // File upload endpoint with streaming for large files
 app.post("/upload", uploadLimiter, multer({ 
     dest: uploadsDir,

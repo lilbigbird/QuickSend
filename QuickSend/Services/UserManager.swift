@@ -40,7 +40,19 @@ class UserManager {
             switch result {
             case .success(let user):
                 self.currentUser = user
-                completion(.success(user))
+                
+                // Sync subscription data from backend
+                NetworkService.shared.syncUserData { syncResult in
+                    switch syncResult {
+                    case .success(let syncedUser):
+                        // Update local user with synced subscription data
+                        self.currentUser = syncedUser
+                        completion(.success(syncedUser))
+                    case .failure(_):
+                        // If sync fails, still complete with the original user data
+                        completion(.success(user))
+                    }
+                }
             case .failure(let error):
                 completion(.failure(error))
             }
@@ -78,7 +90,7 @@ class UserManager {
     func updateSubscriptionTier(_ tier: User.SubscriptionTier) {
         guard let user = currentUser else { return }
         
-        // Calculate next billing date (one month from now for paid tiers)
+        // Update local user immediately for responsive UI
         let nextBillingDate: Date?
         if tier == .free {
             nextBillingDate = nil
@@ -87,7 +99,6 @@ class UserManager {
             nextBillingDate = calendar.date(byAdding: .month, value: 1, to: Date())
         }
         
-        // Create updated user with new subscription tier
         let updatedUser = User(
             id: user.id,
             email: user.email,
@@ -100,6 +111,18 @@ class UserManager {
         )
         
         currentUser = updatedUser
+        
+        // Sync with backend
+        NetworkService.shared.updateSubscription(tier: tier) { result in
+            switch result {
+            case .success(let syncedUser):
+                // Update with the synced user data from backend
+                self.currentUser = syncedUser
+            case .failure(let error):
+                print("Failed to sync subscription with backend: \(error)")
+                // Keep the local update even if backend sync fails
+            }
+        }
     }
     
     func updateUserName(_ name: String) {

@@ -864,6 +864,156 @@ class NetworkService {
         
         task.resume()
     }
+    
+    // MARK: - Subscription Management
+    func updateSubscription(tier: User.SubscriptionTier, completion: @escaping (Result<User, NetworkError>) -> Void) {
+        guard let url = URL(string: "\(baseURL)/auth/update-subscription") else {
+            completion(.failure(.invalidURL))
+            return
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        // Add authorization header if user is logged in
+        if let user = UserManager.shared.currentUser {
+            request.setValue("Bearer \(user.id)", forHTTPHeaderField: "Authorization")
+        }
+        
+        let body = [
+            "subscriptionTier": tier.rawValue
+        ]
+        
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        } catch {
+            completion(.failure(.decodingError(error)))
+            return
+        }
+        
+        let task = URLSession.shared.dataTask(with: request) { data, response, error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    completion(.failure(.networkError(error)))
+                    return
+                }
+                
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    completion(.failure(.invalidResponse))
+                    return
+                }
+                
+                guard (200...299).contains(httpResponse.statusCode) else {
+                    completion(.failure(.serverError(httpResponse.statusCode)))
+                    return
+                }
+                
+                guard let data = data else {
+                    completion(.failure(.noData))
+                    return
+                }
+                
+                do {
+                    let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+                    
+                    if let success = json?["success"] as? Bool, success {
+                        if let userData = json?["user"] as? [String: Any] {
+                            let user = User(
+                                id: userData["id"] as? String ?? UUID().uuidString,
+                                email: userData["email"] as? String ?? "",
+                                name: userData["name"] as? String ?? "",
+                                subscriptionTier: User.SubscriptionTier(rawValue: userData["subscriptionTier"] as? String ?? "free") ?? .free,
+                                createdAt: ISO8601DateFormatter().date(from: userData["createdAt"] as? String ?? "") ?? Date(),
+                                lastSignIn: ISO8601DateFormatter().date(from: userData["lastSignIn"] as? String ?? "") ?? Date(),
+                                profilePictureData: nil,
+                                nextBillingDate: nil
+                            )
+                            completion(.success(user))
+                        } else {
+                            completion(.failure(.invalidResponse))
+                        }
+                    } else {
+                        let errorMessage = json?["error"] as? String ?? "Unknown error"
+                        completion(.failure(.serverError(400)))
+                    }
+                } catch {
+                    completion(.failure(.decodingError(error)))
+                }
+            }
+        }
+        
+        task.resume()
+    }
+    
+    func syncUserData(completion: @escaping (Result<User, NetworkError>) -> Void) {
+        guard let url = URL(string: "\(baseURL)/auth/sync") else {
+            completion(.failure(.invalidURL))
+            return
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        // Add authorization header if user is logged in
+        if let user = UserManager.shared.currentUser {
+            request.setValue("Bearer \(user.id)", forHTTPHeaderField: "Authorization")
+        }
+        
+        let task = URLSession.shared.dataTask(with: request) { data, response, error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    completion(.failure(.networkError(error)))
+                    return
+                }
+                
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    completion(.failure(.invalidResponse))
+                    return
+                }
+                
+                guard (200...299).contains(httpResponse.statusCode) else {
+                    completion(.failure(.serverError(httpResponse.statusCode)))
+                    return
+                }
+                
+                guard let data = data else {
+                    completion(.failure(.noData))
+                    return
+                }
+                
+                do {
+                    let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+                    
+                    if let success = json?["success"] as? Bool, success {
+                        if let userData = json?["user"] as? [String: Any] {
+                            let user = User(
+                                id: userData["id"] as? String ?? UUID().uuidString,
+                                email: userData["email"] as? String ?? "",
+                                name: userData["name"] as? String ?? "",
+                                subscriptionTier: User.SubscriptionTier(rawValue: userData["subscriptionTier"] as? String ?? "free") ?? .free,
+                                createdAt: ISO8601DateFormatter().date(from: userData["createdAt"] as? String ?? "") ?? Date(),
+                                lastSignIn: ISO8601DateFormatter().date(from: userData["lastSignIn"] as? String ?? "") ?? Date(),
+                                profilePictureData: nil,
+                                nextBillingDate: nil
+                            )
+                            completion(.success(user))
+                        } else {
+                            completion(.failure(.invalidResponse))
+                        }
+                    } else {
+                        let errorMessage = json?["error"] as? String ?? "Unknown error"
+                        completion(.failure(.serverError(400)))
+                    }
+                } catch {
+                    completion(.failure(.decodingError(error)))
+                }
+            }
+        }
+        
+        task.resume()
+    }
 }
 
 // MARK: - Response Models
