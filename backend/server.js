@@ -94,7 +94,7 @@ app.post("/upload", multer({ dest: uploadsDir }).single("file"), async (req, res
             true
         ]);
 
-        const downloadLink = `https://api.quicksend.vip/download/${fileId}`;
+        const downloadLink = `https://quicksend-backend.onrender.com/download/${fileId}`;
         
         res.json({
             success: true,
