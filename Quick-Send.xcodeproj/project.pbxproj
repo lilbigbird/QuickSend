@@ -1,0 +1,614 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		8CC90D282E2C08E70028AA7E /* GoogleMobileAds in Frameworks */ = {isa = PBXBuildFile; productRef = 8CC90D272E2C08E70028AA7E /* GoogleMobileAds */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		8CAC94C22E1F0869001319FB /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 8CAC94A32E1F0866001319FB /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 8CAC94AA2E1F0866001319FB;
+			remoteInfo = QuickSend;
+		};
+		8CAC94CC2E1F0869001319FB /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 8CAC94A32E1F0866001319FB /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 8CAC94AA2E1F0866001319FB;
+			remoteInfo = QuickSend;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		8CAC94AB2E1F0866001319FB /* Quick-Send.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Quick-Send.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		8CAC94C12E1F0869001319FB /* Quick-SendTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Quick-SendTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		8CAC94CB2E1F0869001319FB /* Quick-SendUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Quick-SendUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		8CAC94D32E1F0869001319FB /* Exceptions for "QuickSend" folder in "Quick-Send" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 8CAC94AA2E1F0866001319FB /* Quick-Send */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		8CAC94AD2E1F0866001319FB /* QuickSend */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				8CAC94D32E1F0869001319FB /* Exceptions for "QuickSend" folder in "Quick-Send" target */,
+			);
+			path = QuickSend;
+			sourceTree = "<group>";
+		};
+		8CAC94C42E1F0869001319FB /* QuickSendTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = QuickSendTests;
+			sourceTree = "<group>";
+		};
+		8CAC94CE2E1F0869001319FB /* QuickSendUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = QuickSendUITests;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		8CAC94A82E1F0866001319FB /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8CC90D282E2C08E70028AA7E /* GoogleMobileAds in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8CAC94BE2E1F0869001319FB /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8CAC94C82E1F0869001319FB /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		8CAC94A22E1F0866001319FB = {
+			isa = PBXGroup;
+			children = (
+				8CAC94AD2E1F0866001319FB /* QuickSend */,
+				8CAC94C42E1F0869001319FB /* QuickSendTests */,
+				8CAC94CE2E1F0869001319FB /* QuickSendUITests */,
+				8CAC94AC2E1F0866001319FB /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		8CAC94AC2E1F0866001319FB /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				8CAC94AB2E1F0866001319FB /* Quick-Send.app */,
+				8CAC94C12E1F0869001319FB /* Quick-SendTests.xctest */,
+				8CAC94CB2E1F0869001319FB /* Quick-SendUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		8CAC94AA2E1F0866001319FB /* Quick-Send */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8CAC94D42E1F0869001319FB /* Build configuration list for PBXNativeTarget "Quick-Send" */;
+			buildPhases = (
+				8CAC94A72E1F0866001319FB /* Sources */,
+				8CAC94A82E1F0866001319FB /* Frameworks */,
+				8CAC94A92E1F0866001319FB /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				8CAC94AD2E1F0866001319FB /* QuickSend */,
+			);
+			name = "Quick-Send";
+			packageProductDependencies = (
+				8CC90D272E2C08E70028AA7E /* GoogleMobileAds */,
+			);
+			productName = QuickSend;
+			productReference = 8CAC94AB2E1F0866001319FB /* Quick-Send.app */;
+			productType = "com.apple.product-type.application";
+		};
+		8CAC94C02E1F0869001319FB /* Quick-SendTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8CAC94D92E1F0869001319FB /* Build configuration list for PBXNativeTarget "Quick-SendTests" */;
+			buildPhases = (
+				8CAC94BD2E1F0869001319FB /* Sources */,
+				8CAC94BE2E1F0869001319FB /* Frameworks */,
+				8CAC94BF2E1F0869001319FB /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				8CAC94C32E1F0869001319FB /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				8CAC94C42E1F0869001319FB /* QuickSendTests */,
+			);
+			name = "Quick-SendTests";
+			packageProductDependencies = (
+			);
+			productName = QuickSendTests;
+			productReference = 8CAC94C12E1F0869001319FB /* Quick-SendTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		8CAC94CA2E1F0869001319FB /* Quick-SendUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8CAC94DC2E1F0869001319FB /* Build configuration list for PBXNativeTarget "Quick-SendUITests" */;
+			buildPhases = (
+				8CAC94C72E1F0869001319FB /* Sources */,
+				8CAC94C82E1F0869001319FB /* Frameworks */,
+				8CAC94C92E1F0869001319FB /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				8CAC94CD2E1F0869001319FB /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				8CAC94CE2E1F0869001319FB /* QuickSendUITests */,
+			);
+			name = "Quick-SendUITests";
+			packageProductDependencies = (
+			);
+			productName = QuickSendUITests;
+			productReference = 8CAC94CB2E1F0869001319FB /* Quick-SendUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		8CAC94A32E1F0866001319FB /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1640;
+				LastUpgradeCheck = 1640;
+				TargetAttributes = {
+					8CAC94AA2E1F0866001319FB = {
+						CreatedOnToolsVersion = 16.4;
+					};
+					8CAC94C02E1F0869001319FB = {
+						CreatedOnToolsVersion = 16.4;
+						TestTargetID = 8CAC94AA2E1F0866001319FB;
+					};
+					8CAC94CA2E1F0869001319FB = {
+						CreatedOnToolsVersion = 16.4;
+						TestTargetID = 8CAC94AA2E1F0866001319FB;
+					};
+				};
+			};
+			buildConfigurationList = 8CAC94A62E1F0866001319FB /* Build configuration list for PBXProject "Quick-Send" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 8CAC94A22E1F0866001319FB;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				8CC90D262E2C08E70028AA7E /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 8CAC94AC2E1F0866001319FB /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				8CAC94AA2E1F0866001319FB /* Quick-Send */,
+				8CAC94C02E1F0869001319FB /* Quick-SendTests */,
+				8CAC94CA2E1F0869001319FB /* Quick-SendUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		8CAC94A92E1F0866001319FB /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8CAC94BF2E1F0869001319FB /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8CAC94C92E1F0869001319FB /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		8CAC94A72E1F0866001319FB /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8CAC94BD2E1F0869001319FB /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8CAC94C72E1F0869001319FB /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		8CAC94C32E1F0869001319FB /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 8CAC94AA2E1F0866001319FB /* Quick-Send */;
+			targetProxy = 8CAC94C22E1F0869001319FB /* PBXContainerItemProxy */;
+		};
+		8CAC94CD2E1F0869001319FB /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 8CAC94AA2E1F0866001319FB /* Quick-Send */;
+			targetProxy = 8CAC94CC2E1F0869001319FB /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		8CAC94D52E1F0869001319FB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 46Y3DD6Y75;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = QuickSend/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Quick-Send";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_NSDocumentsFolderUsageDescription = "QuickSend needs access to your documents to allow file selection and sharing.";
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
+				INFOPLIST_KEY_UIMainStoryboardFile = Main;
+				INFOPLIST_KEY_UIRequiredDeviceCapabilities = armv7;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.birdstudios.quicksend;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		8CAC94D62E1F0869001319FB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 46Y3DD6Y75;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = QuickSend/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Quick-Send";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_NSDocumentsFolderUsageDescription = "QuickSend needs access to your documents to allow file selection and sharing.";
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
+				INFOPLIST_KEY_UIMainStoryboardFile = Main;
+				INFOPLIST_KEY_UIRequiredDeviceCapabilities = armv7;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.birdstudios.quicksend;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		8CAC94D72E1F0869001319FB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 46Y3DD6Y75;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		8CAC94D82E1F0869001319FB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 46Y3DD6Y75;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		8CAC94DA2E1F0869001319FB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 46Y3DD6Y75;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.birdstudios.QuickSendTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Quick-Send.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Quick-Send";
+			};
+			name = Debug;
+		};
+		8CAC94DB2E1F0869001319FB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 46Y3DD6Y75;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.birdstudios.QuickSendTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Quick-Send.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Quick-Send";
+			};
+			name = Release;
+		};
+		8CAC94DD2E1F0869001319FB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 46Y3DD6Y75;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.birdstudios.QuickSendUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = QuickSend;
+			};
+			name = Debug;
+		};
+		8CAC94DE2E1F0869001319FB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 46Y3DD6Y75;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.birdstudios.QuickSendUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = QuickSend;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		8CAC94A62E1F0866001319FB /* Build configuration list for PBXProject "Quick-Send" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8CAC94D72E1F0869001319FB /* Debug */,
+				8CAC94D82E1F0869001319FB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		8CAC94D42E1F0869001319FB /* Build configuration list for PBXNativeTarget "Quick-Send" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8CAC94D52E1F0869001319FB /* Debug */,
+				8CAC94D62E1F0869001319FB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		8CAC94D92E1F0869001319FB /* Build configuration list for PBXNativeTarget "Quick-SendTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8CAC94DA2E1F0869001319FB /* Debug */,
+				8CAC94DB2E1F0869001319FB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		8CAC94DC2E1F0869001319FB /* Build configuration list for PBXNativeTarget "Quick-SendUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8CAC94DD2E1F0869001319FB /* Debug */,
+				8CAC94DE2E1F0869001319FB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		8CC90D262E2C08E70028AA7E /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/googleads/swift-package-manager-google-mobile-ads";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 12.7.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		8CC90D272E2C08E70028AA7E /* GoogleMobileAds */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8CC90D262E2C08E70028AA7E /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */;
+			productName = GoogleMobileAds;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 8CAC94A32E1F0866001319FB /* Project object */;
+}
